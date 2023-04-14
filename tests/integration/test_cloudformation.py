@@ -26,7 +26,7 @@ def queue_exists(name):
     sqs_client = aws_stack.connect_to_service('sqs')
     queues = sqs_client.list_queues()
     for queue_url in queues['QueueUrls']:
-        if queue_url.endswith('/%s' % name):
+        if queue_url.endswith(f'/{name}'):
             return True
 
 
@@ -35,7 +35,7 @@ def topic_exists(name):
     topics = sns_client.list_topics()
     for topic in topics['Topics']:
         topic_arn = topic['TopicArn']
-        if topic_arn.endswith(':%s' % name):
+        if topic_arn.endswith(f':{name}'):
             return topic_arn
 
 

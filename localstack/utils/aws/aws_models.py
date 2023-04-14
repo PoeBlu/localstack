@@ -21,7 +21,7 @@ class Component(object):
         return self.__str__()
 
     def __str__(self):
-        return '<%s:%s>' % (self.__class__.__name__, self.id)
+        return f'<{self.__class__.__name__}:{self.id}>'
 
 
 class KinesisStream(Component):
@@ -70,18 +70,17 @@ class KinesisStream(Component):
             try:
                 if record['NextShardIterator'] is None:
                     break
-                else:
-                    next_entry = self.conn.get_records(record['NextShardIterator'])
-                    if len(next_entry['Records']):
-                        print(next_entry['Records'][0]['Data'])
-                    record = next_entry
+                next_entry = self.conn.get_records(record['NextShardIterator'])
+                if len(next_entry['Records']):
+                    print(next_entry['Records'][0]['Data'])
+                record = next_entry
             except Exception as e:
                 print('Error reading from Kinesis stream "%s": %s' (self.stream_name, e))
 
     def wait_for(self):
         GET_STATUS_SLEEP_SECS = 5
         GET_STATUS_RETRIES = 50
-        for i in range(0, GET_STATUS_RETRIES):
+        for _ in range(GET_STATUS_RETRIES):
             try:
                 status = self.get_status()
                 if status == 'ACTIVE':
@@ -90,7 +89,9 @@ class KinesisStream(Component):
                 # swallowing this exception should be ok, as we are in a retry loop
                 pass
             time.sleep(GET_STATUS_SLEEP_SECS)
-        raise Exception('Failed to get active status for stream "%s", giving up' % self.stream_name)
+        raise Exception(
+            f'Failed to get active status for stream "{self.stream_name}", giving up'
+        )
 
     def destroy(self):
         self.conn.delete_stream(StreamName=self.stream_name)
@@ -108,9 +109,9 @@ class KinesisShard(Component):
         self.child_shards = []
 
     def print_tree(self, indent=''):
-        print('%s%s' % (indent, self))
+        print(f'{indent}{self}')
         for c in self.child_shards:
-            c.print_tree(indent=indent + '   ')
+            c.print_tree(indent=f'{indent}   ')
 
     def length(self):
         return long(self.end_key) - long(self.start_key)
@@ -119,9 +120,7 @@ class KinesisShard(Component):
         return 100.0 * self.length() / float(KinesisShard.MAX_KEY)
 
     def __str__(self):
-        return ('Shard(%s, length=%s, percent=%s, start=%s, end=%s)' %
-                (self.id, self.length(), self.percent(), self.start_key,
-                    self.end_key))
+        return f'Shard({self.id}, length={self.length()}, percent={self.percent()}, start={self.start_key}, end={self.end_key})'
 
     @staticmethod
     def sort(shards):
@@ -203,7 +202,7 @@ class LambdaFunction(Component):
         return qualifier in self.aliases or qualifier in self.versions
 
     def __str__(self):
-        return '<%s:%s>' % (self.__class__.__name__, self.name())
+        return f'<{self.__class__.__name__}:{self.name()}>'
 
 
 class DynamoDB(Component):
@@ -229,11 +228,15 @@ class DynamoDBItem(Component):
         self.keys = keys
 
     def __eq__(self, other):
-        if not isinstance(other, DynamoDBItem):
-            return False
-        return (other.table == self.table and
-            other.id == self.id and
-            other.keys == self.keys)
+        return (
+            (
+                other.table == self.table
+                and other.id == self.id
+                and other.keys == self.keys
+            )
+            if isinstance(other, DynamoDBItem)
+            else False
+        )
 
     def __hash__(self):
         return hash(self.table) + hash(self.id) + hash(self.keys)
@@ -305,11 +308,10 @@ class EventSource(Component):
             for o in EventSource.filter_type(pool, type):
                 if o.name() == obj:
                     return o
-                if type == ElasticSearch:
-                    if o.endpoint == obj:
-                        return o
+                if type == ElasticSearch and o.endpoint == obj:
+                    return o
         else:
-            print("Unexpected object name: '%s'" % obj)
+            print(f"Unexpected object name: '{obj}'")
         return inst
 
     @staticmethod

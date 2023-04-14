@@ -76,12 +76,17 @@ def install_dependencies():
         requirements = f.read()
     install_requires = []
     for line in re.split('\n', requirements):
-        if line and line[0] != '#':
-            if BASIC_LIB_MARKER not in line and IGNORED_LIB_MARKER not in line:
-                line = line.split(' #')[0].strip()
-                install_requires.append(line)
-    LOG.info('Lazily installing missing pip dependencies, this could take a while: %s' %
-             ', '.join(install_requires))
+        if (
+            line
+            and line[0] != '#'
+            and BASIC_LIB_MARKER not in line
+            and IGNORED_LIB_MARKER not in line
+        ):
+            line = line.split(' #')[0].strip()
+            install_requires.append(line)
+    LOG.info(
+        f"Lazily installing missing pip dependencies, this could take a while: {', '.join(install_requires)}"
+    )
     args = ['install'] + install_requires
     if hasattr(pip_mod, 'main'):
         pip_mod.main(args)
@@ -91,24 +96,25 @@ def install_dependencies():
 
 
 def load_plugin_from_path(file_path, scope=None):
-    if os.path.exists(file_path):
-        module = re.sub(r'(^|.+/)([^/]+)/plugins.py', r'\2', file_path)
-        method_name = 'register_localstack_plugins'
-        scope = scope or PLUGIN_SCOPE_SERVICES
-        if scope == PLUGIN_SCOPE_COMMANDS:
-            method_name = 'register_localstack_commands'
-        try:
-            namespace = {}
-            exec('from %s.plugins import %s' % (module, method_name), namespace)
-            method_to_execute = namespace[method_name]
-        except Exception as e:
-            if not re.match(r'.*cannot import name .*%s.*' % method_name, str(e)):
-                LOG.debug('Unable to load plugins from module %s: %s' % (module, e))
-            return
-        try:
-            return method_to_execute()
-        except Exception as e:
-            LOG.warning('Unable to load plugins from file %s: %s' % (file_path, e))
+    if not os.path.exists(file_path):
+        return
+    module = re.sub(r'(^|.+/)([^/]+)/plugins.py', r'\2', file_path)
+    method_name = 'register_localstack_plugins'
+    scope = scope or PLUGIN_SCOPE_SERVICES
+    if scope == PLUGIN_SCOPE_COMMANDS:
+        method_name = 'register_localstack_commands'
+    try:
+        namespace = {}
+        exec(f'from {module}.plugins import {method_name}', namespace)
+        method_to_execute = namespace[method_name]
+    except Exception as e:
+        if not re.match(f'.*cannot import name .*{method_name}.*', str(e)):
+            LOG.debug(f'Unable to load plugins from module {module}: {e}')
+        return
+    try:
+        return method_to_execute()
+    except Exception as e:
+        LOG.warning(f'Unable to load plugins from file {file_path}: {e}')
 
 
 def load_plugins(scope=None):
@@ -123,13 +129,12 @@ def load_plugins(scope=None):
     for module in pkgutil.iter_modules():
         file_path = None
         if six.PY3 and not isinstance(module, tuple):
-            file_path = '%s/%s/plugins.py' % (module.module_finder.path, module.name)
+            file_path = f'{module.module_finder.path}/{module.name}/plugins.py'
         elif six.PY3 or isinstance(module[0], pkgutil.ImpImporter):
             if hasattr(module[0], 'path'):
-                file_path = '%s/%s/plugins.py' % (module[0].path, module[1])
+                file_path = f'{module[0].path}/{module[1]}/plugins.py'
         if file_path and file_path not in loaded_files:
-            plugin_config = load_plugin_from_path(file_path, scope=scope)
-            if plugin_config:
+            if plugin_config := load_plugin_from_path(file_path, scope=scope):
                 result.append(plugin_config)
             loaded_files.append(file_path)
     # set global flag
@@ -208,7 +213,7 @@ def canonicalize_api_names(apis=None):
                 apis.append(dep)
 
     # remove duplicates and composite names
-    apis = list(set([a for a in apis if a not in API_COMPOSITES.keys()]))
+    apis = list({a for a in apis if a not in API_COMPOSITES.keys()})
 
     # make sure we have port mappings for each API
     for api in apis:
@@ -222,7 +227,7 @@ def canonicalize_api_names(apis=None):
 def is_api_enabled(api):
     apis = canonicalize_api_names()
     for a in apis:
-        if a == api or a.startswith('%s:' % api):
+        if a == api or a.startswith(f'{api}:'):
             return True
 
 
@@ -237,7 +242,9 @@ def start_infra_in_docker():
     container_name = MAIN_CONTAINER_NAME
 
     if docker_container_running(container_name):
-        raise Exception('LocalStack container named "%s" is already running' % container_name)
+        raise Exception(
+            f'LocalStack container named "{container_name}" is already running'
+        )
 
     # load plugins before starting the docker container
     plugin_configs = load_plugins()
@@ -262,8 +269,8 @@ def start_infra_in_docker():
     match = re.match(regex, user_flags)
     start = end = 0
     if match:
-        start = int(match.group(1))
-        end = int(match.group(3) or match.group(1))
+        start = int(match[1])
+        end = int(match[3] or match[1])
 
     def is_mapped(start_port, end_port=None):
         existing_range = range(start, end)
@@ -274,7 +281,7 @@ def start_infra_in_docker():
     start_port = 0
     last_port = 0
     port_ranges = []
-    for i in range(0, len(ports_list)):
+    for i in range(len(ports_list)):
         if not start_port:
             start_port = ports_list[i]
         if not last_port:
@@ -300,21 +307,23 @@ def start_infra_in_docker():
     for env_var in config.CONFIG_ENV_VARS:
         value = os.environ.get(env_var, None)
         if value is not None:
-            env_str += '-e %s="%s" ' % (env_var, value)
+            env_str += f'-e {env_var}="{value}" '
 
     data_dir_mount = ''
     data_dir = os.environ.get('DATA_DIR', None)
     if data_dir is not None:
         container_data_dir = '/tmp/localstack_data'
-        data_dir_mount = '-v "%s:%s"' % (data_dir, container_data_dir)
-        env_str += '-e DATA_DIR="%s" ' % container_data_dir
+        data_dir_mount = f'-v "{data_dir}:{container_data_dir}"'
+        env_str += f'-e DATA_DIR="{container_data_dir}" '
 
     interactive = '' if force_noninteractive or in_ci() else '-it '
 
     # append space if parameter is set
-    user_flags = '%s ' % user_flags if user_flags else user_flags
-    entrypoint = '%s ' % entrypoint if entrypoint else entrypoint
-    plugin_run_params = '%s ' % plugin_run_params if plugin_run_params else plugin_run_params
+    user_flags = f'{user_flags} ' if user_flags else user_flags
+    entrypoint = f'{entrypoint} ' if entrypoint else entrypoint
+    plugin_run_params = (
+        f'{plugin_run_params} ' if plugin_run_params else plugin_run_params
+    )
     web_ui_flags = '-p {p}:{p} '.format(p=config.PORT_WEB_UI)
 
     docker_cmd = ('%s run %s%s%s%s%s' +
@@ -332,7 +341,7 @@ def start_infra_in_docker():
 
     mkdir(config.TMP_FOLDER)
     try:
-        run('chmod -R 777 "%s"' % config.TMP_FOLDER)
+        run(f'chmod -R 777 "{config.TMP_FOLDER}"')
     except Exception:
         pass
 
@@ -352,11 +361,13 @@ def start_infra_in_docker():
 
     if DO_CHMOD_DOCKER_SOCK:
         # fix permissions on /var/run/docker.sock
-        for i in range(0, 100):
+        for i in range(100):
             if docker_container_running(container_name):
                 break
             time.sleep(2)
-        run('%s exec -u root "%s" chmod 777 /var/run/docker.sock' % (config.DOCKER_CMD, container_name))
+        run(
+            f'{config.DOCKER_CMD} exec -u root "{container_name}" chmod 777 /var/run/docker.sock'
+        )
 
     t.process.wait()
     sys.exit(t.process.returncode)
@@ -373,10 +384,10 @@ def to_str(obj, errors='strict'):
 
 def in_ci():
     """ Whether or not we are running in a CI environment """
-    for key in ('CI', 'TRAVIS'):
-        if os.environ.get(key, '') not in [False, '', '0', 'false']:
-            return True
-    return False
+    return any(
+        os.environ.get(key, '') not in [False, '', '0', 'false']
+        for key in ('CI', 'TRAVIS')
+    )
 
 
 class FuncThread(threading.Thread):
@@ -394,8 +405,9 @@ class FuncThread(threading.Thread):
             self.func(self.params)
         except Exception:
             if not self.quiet:
-                LOG.warning('Thread run method %s(%s) failed: %s' %
-                    (self.func, self.params, traceback.format_exc()))
+                LOG.warning(
+                    f'Thread run method {self.func}({self.params}) failed: {traceback.format_exc()}'
+                )
 
     def stop(self, quiet=False):
         if not quiet and not self.quiet:
@@ -461,7 +473,7 @@ def run(cmd, print_error=True, asynchronous=False, stdin=False,
             return process
     except subprocess.CalledProcessError as e:
         if print_error:
-            print("ERROR: '%s': exit code %s; output: %s" % (cmd, e.returncode, e.output))
+            print(f"ERROR: '{cmd}': exit code {e.returncode}; output: {e.output}")
             sys.stdout.flush()
         raise e
 

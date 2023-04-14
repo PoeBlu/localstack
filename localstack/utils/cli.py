@@ -70,10 +70,12 @@ Options:
     lines = to_str(run('docker ps')).split('\n')[1:]
     lines = [l for l in lines if MAIN_CONTAINER_NAME in l]
     if len(lines) != 1:
-        raise Exception('Expected 1 running "%s" container, but found %s' % (MAIN_CONTAINER_NAME, len(lines)))
+        raise Exception(
+            f'Expected 1 running "{MAIN_CONTAINER_NAME}" container, but found {len(lines)}'
+        )
     cid = re.split(r'\s', lines[0])[0]
     try:
-        process = run('docker exec -it %s bash' % cid, tty=True)
+        process = run(f'docker exec -it {cid} bash', tty=True)
         process.wait()
     except KeyboardInterrupt:
         pass

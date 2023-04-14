@@ -49,9 +49,8 @@ def event_type_matches(events, action, api_method):
         given `action` and `api_method`, and return the first match. """
     for event in events:
         regex = event.replace('*', '[^:]*')
-        action_string = 's3:%s:%s' % (action, api_method)
-        match = re.match(regex, action_string)
-        if match:
+        action_string = f's3:{action}:{api_method}'
+        if match := re.match(regex, action_string):
             return match
     return False
 
@@ -68,7 +67,7 @@ def filter_rules_match(filters, object_path):
             if not object_path.endswith(rule['Value']):
                 return False
         else:
-            LOGGER.warning('Unknown filter name: "%s"' % rule['Name'])
+            LOGGER.warning(f"""Unknown filter name: "{rule['Name']}\"""")
     return True
 
 
@@ -77,47 +76,45 @@ def _get_s3_filter(filters):
 
 
 def prefix_with_slash(s):
-    return s if s[0] == '/' else '/%s' % s
+    return s if s[0] == '/' else f'/{s}'
 
 
 def get_event_message(event_name, bucket_name, file_name='testfile.txt', version_id=None, file_size=1024):
     # Based on: http://docs.aws.amazon.com/AmazonS3/latest/dev/notification-content-structure.html
     return {
-        'Records': [{
-            'eventVersion': '2.0',
-            'eventSource': 'aws:s3',
-            'awsRegion': DEFAULT_REGION,
-            'eventTime': timestamp(format=TIMESTAMP_FORMAT_MILLIS),
-            'eventName': event_name,
-            'userIdentity': {
-                'principalId': 'AIDAJDPLRKLG7UEXAMPLE'
-            },
-            'requestParameters': {
-                'sourceIPAddress': '127.0.0.1'  # TODO determine real source IP
-            },
-            'responseElements': {
-                'x-amz-request-id': short_uid(),
-                'x-amz-id-2': 'eftixk72aD6Ap51TnqcoF8eFidJG9Z/2'  # Amazon S3 host that processed the request
-            },
-            's3': {
-                's3SchemaVersion': '1.0',
-                'configurationId': 'testConfigRule',
-                'bucket': {
-                    'name': bucket_name,
-                    'ownerIdentity': {
-                        'principalId': 'A3NL1KOZZKExample'
-                    },
-                    'arn': 'arn:aws:s3:::%s' % bucket_name
+        'Records': [
+            {
+                'eventVersion': '2.0',
+                'eventSource': 'aws:s3',
+                'awsRegion': DEFAULT_REGION,
+                'eventTime': timestamp(format=TIMESTAMP_FORMAT_MILLIS),
+                'eventName': event_name,
+                'userIdentity': {'principalId': 'AIDAJDPLRKLG7UEXAMPLE'},
+                'requestParameters': {
+                    'sourceIPAddress': '127.0.0.1'  # TODO determine real source IP
                 },
-                'object': {
-                    'key': file_name,
-                    'size': file_size,
-                    'eTag': 'd41d8cd98f00b204e9800998ecf8427e',
-                    'versionId': version_id,
-                    'sequencer': '0055AED6DCD90281E5'
-                }
+                'responseElements': {
+                    'x-amz-request-id': short_uid(),
+                    'x-amz-id-2': 'eftixk72aD6Ap51TnqcoF8eFidJG9Z/2',  # Amazon S3 host that processed the request
+                },
+                's3': {
+                    's3SchemaVersion': '1.0',
+                    'configurationId': 'testConfigRule',
+                    'bucket': {
+                        'name': bucket_name,
+                        'ownerIdentity': {'principalId': 'A3NL1KOZZKExample'},
+                        'arn': f'arn:aws:s3:::{bucket_name}',
+                    },
+                    'object': {
+                        'key': file_name,
+                        'size': file_size,
+                        'eTag': 'd41d8cd98f00b204e9800998ecf8427e',
+                        'versionId': version_id,
+                        'sequencer': '0055AED6DCD90281E5',
+                    },
+                },
             }
-        }]
+        ]
     }
 
 
@@ -139,7 +136,7 @@ def send_notifications(method, bucket_name, object_path, version_id):
             else:
                 api_method = {'PUT': 'Put', 'POST': 'Post', 'DELETE': 'Delete'}[method]
 
-            event_name = '%s:%s' % (action, api_method)
+            event_name = f'{action}:{api_method}'
             if (event_type_matches(b_cfg['Event'], action, api_method) and
                     filter_rules_match(b_cfg.get('Filter'), object_path)):
                 # send notification
@@ -155,18 +152,20 @@ def send_notifications(method, bucket_name, object_path, version_id):
                         queue_url = queue_url_for_arn(b_cfg['Queue'])
                         sqs_client.send_message(QueueUrl=queue_url, MessageBody=message)
                     except Exception as e:
-                        LOGGER.warning('Unable to send notification for S3 bucket "%s" to SQS queue "%s": %s' %
-                            (bucket_name, b_cfg['Queue'], e))
+                        LOGGER.warning(
+                            f"""Unable to send notification for S3 bucket "{bucket_name}" to SQS queue "{b_cfg['Queue']}": {e}"""
+                        )
                 if b_cfg.get('Topic'):
                     sns_client = aws_stack.connect_to_service('sns')
                     try:
                         sns_client.publish(TopicArn=b_cfg['Topic'], Message=message, Subject='Amazon S3 Notification')
                     except Exception:
-                        LOGGER.warning('Unable to send notification for S3 bucket "%s" to SNS topic "%s".' %
-                            (bucket_name, b_cfg['Topic']))
-                # CloudFunction and LambdaFunction are semantically identical
-                lambda_function_config = b_cfg.get('CloudFunction') or b_cfg.get('LambdaFunction')
-                if lambda_function_config:
+                        LOGGER.warning(
+                            f"""Unable to send notification for S3 bucket "{bucket_name}" to SNS topic "{b_cfg['Topic']}"."""
+                        )
+                if lambda_function_config := b_cfg.get(
+                    'CloudFunction'
+                ) or b_cfg.get('LambdaFunction'):
                     # make sure we don't run into a socket timeout
                     connection_config = botocore.config.Config(read_timeout=300)
                     lambda_client = aws_stack.connect_to_service('lambda', config=connection_config)
@@ -174,11 +173,13 @@ def send_notifications(method, bucket_name, object_path, version_id):
                         lambda_client.invoke(FunctionName=lambda_function_config,
                                              InvocationType='Event', Payload=message)
                     except Exception:
-                        LOGGER.warning('Unable to send notification for S3 bucket "%s" to Lambda function "%s".' %
-                            (bucket_name, lambda_function_config))
+                        LOGGER.warning(
+                            f'Unable to send notification for S3 bucket "{bucket_name}" to Lambda function "{lambda_function_config}".'
+                        )
                 if not filter(lambda x: b_cfg.get(x), NOTIFICATION_DESTINATION_TYPES):
-                    LOGGER.warning('Neither of %s defined for S3 notification.' %
-                        '/'.join(NOTIFICATION_DESTINATION_TYPES))
+                    LOGGER.warning(
+                        f"Neither of {'/'.join(NOTIFICATION_DESTINATION_TYPES)} defined for S3 notification."
+                    )
 
 
 def get_cors(bucket_name):
@@ -258,24 +259,25 @@ def append_last_modified_headers(response, content=None):
     time_format = '%a, %d %b %Y %H:%M:%S GMT'  # TimeFormat
     try:
         if content:
-            last_modified_str = re.findall(r'<LastModified>(.*)</LastModified>', content)
-            if last_modified_str:
+            if last_modified_str := re.findall(
+                r'<LastModified>(.*)</LastModified>', content
+            ):
                 last_modified_str = last_modified_str[0]
                 last_modified_time_format = dateutil.parser.parse(last_modified_str).strftime(time_format)
                 response.headers['Last-Modified'] = last_modified_time_format
     except TypeError as err:
-        LOGGER.debug('No parsable content: %s' % err)
+        LOGGER.debug(f'No parsable content: {err}')
     except ValueError as err:
-        LOGGER.error('Failed to parse LastModified: %s' % err)
+        LOGGER.error(f'Failed to parse LastModified: {err}')
     except Exception as err:
-        LOGGER.error('Caught generic exception (parsing LastModified): %s' % err)
+        LOGGER.error(f'Caught generic exception (parsing LastModified): {err}')
     # if cannot parse any LastModified, just continue
 
     try:
         if response.headers.get('Last-Modified', '') == '':
             response.headers['Last-Modified'] = datetime.datetime.now().strftime(time_format)
     except Exception as err:
-        LOGGER.error('Caught generic exception (setting LastModified header): %s' % err)
+        LOGGER.error(f'Caught generic exception (setting LastModified header): {err}')
 
 
 def get_lifecycle(bucket_name):
@@ -340,10 +342,10 @@ def strip_chunk_signatures(data):
         data, flags=re.MULTILINE | re.DOTALL)
     if data_new != data:
         # trim \r (13) or \n (10)
-        for i in range(0, 2):
+        for _ in range(2):
             if len(data_new) and data_new[0] in (10, 13):
                 data_new = data_new[1:]
-        for i in range(0, 6):
+        for _ in range(6):
             if len(data_new) and data_new[-1] in (10, 13):
                 data_new = data_new[:-1]
     return data_new
@@ -387,11 +389,16 @@ def expand_redirect_url(starting_url, key, bucket):
     query = collections.OrderedDict(urlparse.parse_qsl(parsed.query))
     query.update([('key', key), ('bucket', bucket)])
 
-    redirect_url = urlparse.urlunparse((
-        parsed.scheme, parsed.netloc, parsed.path,
-        parsed.params, urlparse.urlencode(query), None))
-
-    return redirect_url
+    return urlparse.urlunparse(
+        (
+            parsed.scheme,
+            parsed.netloc,
+            parsed.path,
+            parsed.params,
+            urlparse.urlencode(query),
+            None,
+        )
+    )
 
 
 def get_bucket_name(path, headers):
@@ -424,8 +431,7 @@ def get_bucket_name(path, headers):
     # if any of the above patterns match, the first captured group
     # will be returned as the bucket name
     for pattern in [common_pattern, dualstack_pattern, legacy_patterns]:
-        match = pattern.match(host)
-        if match:
+        if match := pattern.match(host):
             bucket_name = match.groups()[0]
             break
 
@@ -440,17 +446,17 @@ def handle_notification_request(bucket, method, data):
     response._content = ''
     if method == 'GET':
         # TODO check if bucket exists
-        result = '<NotificationConfiguration xmlns="%s">' % XMLNS_S3
+        result = f'<NotificationConfiguration xmlns="{XMLNS_S3}">'
         if bucket in S3_NOTIFICATIONS:
             notif = S3_NOTIFICATIONS[bucket]
             for dest in NOTIFICATION_DESTINATION_TYPES:
                 if dest in notif:
                     dest_dict = {
-                        '%sConfiguration' % dest: {
+                        f'{dest}Configuration': {
                             'Id': uuid.uuid4(),
                             dest: notif[dest],
                             'Event': notif['Event'],
-                            'Filter': notif['Filter']
+                            'Filter': notif['Filter'],
                         }
                     }
                     result += xmltodict.unparse(dest_dict, full_document=False)
@@ -462,8 +468,7 @@ def handle_notification_request(bucket, method, data):
         notif_config = parsed.get('NotificationConfiguration')
         S3_NOTIFICATIONS.pop(bucket, None)
         for dest in NOTIFICATION_DESTINATION_TYPES:
-            config = notif_config.get('%sConfiguration' % (dest))
-            if config:
+            if config := notif_config.get(f'{dest}Configuration'):
                 events = config.get('Event')
                 if isinstance(events, six.string_types):
                     events = [events]
@@ -558,13 +563,15 @@ class ProxyListenerS3(ProxyListener):
             if method == 'PUT':
                 return set_lifecycle(bucket, data)
 
-        if query == 'replication' or 'replication' in query_map:
-            if method == 'GET':
-                return get_replication(bucket)
+        if (
+            query == 'replication' or 'replication' in query_map
+        ) and method == 'GET':
+            return get_replication(bucket)
 
-        if query == 'encryption' or 'encryption' in query_map:
-            if method == 'GET':
-                return get_encryption(bucket)
+        if (
+            query == 'encryption' or 'encryption' in query_map
+        ) and method == 'GET':
+            return get_encryption(bucket)
 
         if modified_data is not None:
             return Request(data=modified_data, headers=headers, method=method)
@@ -590,7 +597,9 @@ class ProxyListenerS3(ProxyListener):
             if key and redirect_url:
                 response.status_code = 303
                 response.headers['Location'] = expand_redirect_url(redirect_url, key, bucket_name)
-                LOGGER.debug('S3 POST {} to {}'.format(response.status_code, response.headers['Location']))
+                LOGGER.debug(
+                    f"S3 POST {response.status_code} to {response.headers['Location']}"
+                )
 
         parsed = urlparse.urlparse(path)
         bucket_name_in_host = headers['host'].startswith(bucket_name)
@@ -608,12 +617,12 @@ class ProxyListenerS3(ProxyListener):
         if should_send_notifications:
             # if we already have a good key, use it, otherwise examine the path
             if key:
-                object_path = '/' + key
+                object_path = f'/{key}'
             elif bucket_name_in_host:
                 object_path = parsed.path
             else:
                 parts = parsed.path[1:].split('/', 1)
-                object_path = parts[1] if parts[1][0] == '/' else '/%s' % parts[1]
+                object_path = parts[1] if parts[1][0] == '/' else f'/{parts[1]}'
             version_id = response.headers.get('x-amz-version-id', None)
 
             send_notifications(method, bucket_name, object_path, version_id)
@@ -685,7 +694,7 @@ class ProxyListenerS3(ProxyListener):
     def _update_location(self, content, bucket_name):
         host = config.HOSTNAME_EXTERNAL
         if ':' not in host:
-            host = '%s:%s' % (host, config.PORT_S3)
+            host = f'{host}:{config.PORT_S3}'
         return re.sub(r'<Location>\s*([a-zA-Z0-9\-]+)://[^/]+/([^<]+)\s*</Location>',
             r'<Location>%s://%s/%s/\2</Location>' % (get_service_protocol(), host, bucket_name),
             content, flags=re.MULTILINE)

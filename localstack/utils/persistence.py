@@ -23,11 +23,7 @@ LOGGER = logging.getLogger(__name__)
 
 def should_record(api, method, path, data, headers):
     """ Decide whether or not a given API call should be recorded (persisted to disk) """
-    if api == 's3':
-        if method not in ['PUT', 'POST', 'DELETE']:
-            return False
-        return True
-    return False
+    return method in ['PUT', 'POST', 'DELETE'] if api == 's3' else False
 
 
 def record(api, method, path, data, headers):
@@ -43,7 +39,7 @@ def record(api, method, path, data, headers):
             try:
                 data = to_bytes(data)
             except Exception as e:
-                LOGGER.warning('Unable to call to_bytes: %s' % e)
+                LOGGER.warning(f'Unable to call to_bytes: {e}')
             data = to_str(base64.b64encode(data))
         entry = {
             'a': api,
@@ -55,7 +51,9 @@ def record(api, method, path, data, headers):
         with open(file_path, 'a') as dumpfile:
             dumpfile.write('%s\n' % json.dumps(entry))
     except Exception as e:
-        print('Error recording API call to persistent file: %s %s' % (e, traceback.format_exc()))
+        print(
+            f'Error recording API call to persistent file: {e} {traceback.format_exc()}'
+        )
 
 
 def replay_command(command):
@@ -65,8 +63,7 @@ def replay_command(command):
         data = base64.b64decode(data)
     endpoint = aws_stack.get_local_service_url(command['a'])
     full_url = (endpoint[:-1] if endpoint.endswith('/') else endpoint) + command['p']
-    result = function(full_url, data=data, headers=command['h'], verify=False)
-    return result
+    return function(full_url, data=data, headers=command['h'], verify=False)
 
 
 def replay(api):
@@ -85,7 +82,7 @@ def replay(api):
     finally:
         CURRENTLY_REPLAYING.pop(0)
     if count:
-        LOGGER.info('Restored %s API calls from persistent file: %s' % (count, file_path))
+        LOGGER.info(f'Restored {count} API calls from persistent file: {file_path}')
 
 
 def restore_persisted_data(api):

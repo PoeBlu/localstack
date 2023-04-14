@@ -105,10 +105,15 @@ def profiled_via_cprofile(lines=50):
                 for sort in ('tottime', 'cumulative', 'ncalls'):
                     result.fcn_list = list_orig
                     result.sort_stats(sort)
-                    result.fcn_list = [e for e in result.fcn_list
-                        if not any([s in str(e) for s in skipped_lines])]
+                    result.fcn_list = [
+                        e
+                        for e in result.fcn_list
+                        if all(s not in str(e) for s in skipped_lines)
+                    ]
                     result.print_stats(lines)
+
         return wrapped
+
     return wrapper
 
 
@@ -127,7 +132,11 @@ def profiled_via_yappi(lines=50):
                 result = list(yappi.get_func_stats())
                 yappi.stop()
                 yappi.clear_stats()
-                result = [l for l in result if all([s not in l.full_name for s in skipped_lines])]
+                result = [
+                    l
+                    for l in result
+                    if all(s not in l.full_name for s in skipped_lines)
+                ]
                 entries = result[:lines]
                 prefix = LOCALSTACK_ROOT_FOLDER
                 result = []
@@ -141,5 +150,7 @@ def profiled_via_yappi(lines=50):
                     result.append('%s\t%s\t%s\t%s\t%s' % (c(e.ncall), c(e.ttot), c(e.tsub), c(e.tavg), name))
                 result = '\n'.join(result)
                 print(result)
+
         return wrapped
+
     return wrapper

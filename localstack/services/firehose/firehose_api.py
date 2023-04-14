@@ -32,20 +32,23 @@ deser = TypeDeserializer()
 
 
 def get_delivery_stream_names():
-    names = []
-    for name, stream in iteritems(DELIVERY_STREAMS):
-        names.append(stream['DeliveryStreamName'])
-    return names
+    return [
+        stream['DeliveryStreamName']
+        for name, stream in iteritems(DELIVERY_STREAMS)
+    ]
 
 
 def get_delivery_stream_tags(stream_name, exclusive_start_tag_key=None, limit=50):
     stream = DELIVERY_STREAMS[stream_name]
-    response = {}
     start_i = -1
     if exclusive_start_tag_key is not None:
         start_i = next(iter([i for i, tag in enumerate(stream['Tags']) if tag['Key'] == exclusive_start_tag_key]))
 
-    response['Tags'] = [tag for i, tag in enumerate(stream['Tags']) if start_i < i < limit]
+    response = {
+        'Tags': [
+            tag for i, tag in enumerate(stream['Tags']) if start_i < i < limit
+        ]
+    }
     response['HasMore'] = len(response['Tags']) < len(stream['Tags'])
     return response
 
@@ -77,7 +80,7 @@ def put_records(stream_name, records):
                 try:
                     es.create(index=es_index, doc_type=es_type, id=obj_id, body=body)
                 except Exception as e:
-                    LOG.error('Unable to put record to stream: %s %s' % (e, traceback.format_exc()))
+                    LOG.error(f'Unable to put record to stream: {e} {traceback.format_exc()}')
                     raise e
         if 'S3DestinationDescription' in dest:
             s3_dest = dest['S3DestinationDescription']
@@ -94,11 +97,11 @@ def put_records(stream_name, records):
                     data = base64.b64decode(record['data'])
 
                 obj_name = str(uuid.uuid4())
-                obj_path = '%s%s%s' % (prefix, '' if prefix.endswith('/') else '/', obj_name)
+                obj_path = f"{prefix}{'' if prefix.endswith('/') else '/'}{obj_name}"
                 try:
                     s3.Object(bucket, obj_path).put(Body=data)
                 except Exception as e:
-                    LOG.error('Unable to put record to stream: %s %s' % (e, traceback.format_exc()))
+                    LOG.error(f'Unable to put record to stream: {e} {traceback.format_exc()}')
                     raise e
 
 
@@ -108,8 +111,7 @@ def get_destination(stream_name, destination_id):
     for dest in destinations:
         if dest['DestinationId'] == destination_id:
             return dest
-    dest = {}
-    dest['DestinationId'] = destination_id
+    dest = {'DestinationId': destination_id}
     destinations.append(dest)
     return dest
 
@@ -168,9 +170,7 @@ def create_stream(stream_name, delivery_stream_type='DirectPut', delivery_stream
 
 def delete_stream(stream_name):
     stream = DELIVERY_STREAMS.pop(stream_name, {})
-    if not stream:
-        return error_not_found(stream_name)
-    return {}
+    return {} if stream else error_not_found(stream_name)
 
 
 def get_stream(stream_name):
@@ -184,11 +184,11 @@ def bucket_name(bucket_arn):
 
 
 def role_arn(stream_name):
-    return 'arn:aws:iam::%s:role/%s' % (TEST_AWS_ACCOUNT_ID, stream_name)
+    return f'arn:aws:iam::{TEST_AWS_ACCOUNT_ID}:role/{stream_name}'
 
 
 def error_not_found(stream_name):
-    msg = 'Firehose %s under account %s not found.' % (stream_name, TEST_AWS_ACCOUNT_ID)
+    msg = f'Firehose {stream_name} under account {TEST_AWS_ACCOUNT_ID} not found.'
     return error_response(msg, code=400, error_type='ResourceNotFoundException')
 
 
@@ -201,12 +201,12 @@ def post_request():
     action = request.headers.get('x-amz-target')
     data = json.loads(to_str(request.data))
     response = None
-    if action == '%s.ListDeliveryStreams' % ACTION_HEADER_PREFIX:
+    if action == f'{ACTION_HEADER_PREFIX}.ListDeliveryStreams':
         response = {
             'DeliveryStreamNames': get_delivery_stream_names(),
             'HasMoreDeliveryStreams': False
         }
-    elif action == '%s.CreateDeliveryStream' % ACTION_HEADER_PREFIX:
+    elif action == f'{ACTION_HEADER_PREFIX}.CreateDeliveryStream':
         stream_name = data['DeliveryStreamName']
         region_name = extract_region_from_auth_header(request.headers)
         response = create_stream(
@@ -215,10 +215,10 @@ def post_request():
             s3_destination=data.get('S3DestinationConfiguration'),
             elasticsearch_destination=data.get('ElasticsearchDestinationConfiguration'),
             tags=data.get('Tags'), region_name=region_name)
-    elif action == '%s.DeleteDeliveryStream' % ACTION_HEADER_PREFIX:
+    elif action == f'{ACTION_HEADER_PREFIX}.DeleteDeliveryStream':
         stream_name = data['DeliveryStreamName']
         response = delete_stream(stream_name)
-    elif action == '%s.DescribeDeliveryStream' % ACTION_HEADER_PREFIX:
+    elif action == f'{ACTION_HEADER_PREFIX}.DescribeDeliveryStream':
         stream_name = data['DeliveryStreamName']
         response = get_stream(stream_name)
         if not response:
@@ -226,14 +226,14 @@ def post_request():
         response = {
             'DeliveryStreamDescription': response
         }
-    elif action == '%s.PutRecord' % ACTION_HEADER_PREFIX:
+    elif action == f'{ACTION_HEADER_PREFIX}.PutRecord':
         stream_name = data['DeliveryStreamName']
         record = data['Record']
         put_record(stream_name, record)
         response = {
             'RecordId': str(uuid.uuid4())
         }
-    elif action == '%s.PutRecordBatch' % ACTION_HEADER_PREFIX:
+    elif action == f'{ACTION_HEADER_PREFIX}.PutRecordBatch':
         stream_name = data['DeliveryStreamName']
         records = data['Records']
         put_records(stream_name, records)
@@ -241,7 +241,7 @@ def post_request():
             'FailedPutCount': 0,
             'RequestResponses': []
         }
-    elif action == '%s.UpdateDestination' % ACTION_HEADER_PREFIX:
+    elif action == f'{ACTION_HEADER_PREFIX}.UpdateDestination':
         stream_name = data['DeliveryStreamName']
         version_id = data['CurrentDeliveryStreamVersionId']
         destination_id = data['DestinationId']
@@ -252,11 +252,13 @@ def post_request():
         update_destination(stream_name=stream_name, destination_id=destination_id,
                            es_update=es_update, version_id=version_id)
         response = {}
-    elif action == '%s.ListTagsForDeliveryStream' % ACTION_HEADER_PREFIX:
+    elif action == f'{ACTION_HEADER_PREFIX}.ListTagsForDeliveryStream':
         response = get_delivery_stream_tags(data['DeliveryStreamName'], data.get('ExclusiveStartTagKey'),
                                             data.get('Limit', 50))
     else:
-        response = error_response('Unknown action "%s"' % action, code=400, error_type='InvalidAction')
+        response = error_response(
+            f'Unknown action "{action}"', code=400, error_type='InvalidAction'
+        )
 
     if isinstance(response, dict):
         response = jsonify(response)

@@ -23,7 +23,7 @@ def check_dynamodb(expect_shutdown=False, print_error=False):
         out = aws_stack.connect_to_service(service_name='dynamodb').list_tables()
     except Exception as e:
         if print_error:
-            LOGGER.error('DynamoDB health check failed: %s %s' % (e, traceback.format_exc()))
+            LOGGER.error(f'DynamoDB health check failed: {e} {traceback.format_exc()}')
     if expect_shutdown:
         assert out is None
     else:
@@ -36,12 +36,12 @@ def start_dynamodb(port=None, asynchronous=False, update_listener=None):
     backend_port = DEFAULT_PORT_DYNAMODB_BACKEND
     ddb_data_dir_param = '-inMemory'
     if config.DATA_DIR:
-        ddb_data_dir = '%s/dynamodb' % config.DATA_DIR
+        ddb_data_dir = f'{config.DATA_DIR}/dynamodb'
         mkdir(ddb_data_dir)
-        ddb_data_dir_param = '-dbPath %s' % ddb_data_dir
+        ddb_data_dir_param = f'-dbPath {ddb_data_dir}'
     cmd = ('cd %s/infra/dynamodb/; java -Djava.library.path=./DynamoDBLocal_lib ' +
         '-Xmx%s -jar DynamoDBLocal.jar -sharedDb -port %s %s') % (
         ROOT_PATH, MAX_HEAP_SIZE, backend_port, ddb_data_dir_param)
-    print('Starting mock DynamoDB (%s port %s)...' % (get_service_protocol(), port))
+    print(f'Starting mock DynamoDB ({get_service_protocol()} port {port})...')
     start_proxy_for_service('dynamodb', port, backend_port, update_listener)
     return do_run(cmd, asynchronous)

@@ -25,8 +25,11 @@ def setUp():
         'interests': ['music']
     }
     resp = add_document(TEST_DOC_ID, document)
-    assert_equal(201, resp.status_code,
-        msg='Request failed({}): {}'.format(resp.status_code, resp.text))
+    assert_equal(
+        201,
+        resp.status_code,
+        msg=f'Request failed({resp.status_code}): {resp.text}',
+    )
 
 
 def tearDown():
@@ -34,7 +37,7 @@ def tearDown():
 
 
 def add_document(id, document):
-    article_path = '{}/{}/employee/{}?pretty'.format(ES_URL, TEST_INDEX, id)
+    article_path = f'{ES_URL}/{TEST_INDEX}/employee/{id}?pretty'
     resp = requests.put(
         article_path,
         data=json.dumps(document),
@@ -45,7 +48,7 @@ def add_document(id, document):
 
 
 def delete_document(id):
-    article_path = '{}/{}/employee/{}?pretty'.format(ES_URL, TEST_INDEX, id)
+    article_path = f'{ES_URL}/{TEST_INDEX}/employee/{id}?pretty'
     resp = requests.delete(article_path, headers=COMMON_HEADERS)
     # Pause to allow the document to be indexed
     time.sleep(1)
@@ -83,16 +86,17 @@ def test_domain_creation():
 
 
 def test_elasticsearch_get_document():
-    article_path = '{}/{}/employee/{}?pretty'.format(
-        ES_URL, TEST_INDEX, TEST_DOC_ID)
+    article_path = f'{ES_URL}/{TEST_INDEX}/employee/{TEST_DOC_ID}?pretty'
     resp = requests.get(article_path, headers=COMMON_HEADERS)
 
-    assert_true('I like to collect rock albums' in resp.text,
-        msg='Document not found({}): {}'.format(resp.status_code, resp.text))
+    assert_true(
+        'I like to collect rock albums' in resp.text,
+        msg=f'Document not found({resp.status_code}): {resp.text}',
+    )
 
 
 def test_elasticsearch_search():
-    search_path = '{}/{}/employee/_search?pretty'.format(ES_URL, TEST_INDEX)
+    search_path = f'{ES_URL}/{TEST_INDEX}/employee/_search?pretty'
 
     search = {
         'query': {
@@ -107,5 +111,7 @@ def test_elasticsearch_search():
         data=json.dumps(search),
         headers=COMMON_HEADERS)
 
-    assert_true('I like to collect rock albums' in resp.text,
-        msg='Search failed({}): {}'.format(resp.status_code, resp.text))
+    assert_true(
+        'I like to collect rock albums' in resp.text,
+        msg=f'Search failed({resp.status_code}): {resp.text}',
+    )

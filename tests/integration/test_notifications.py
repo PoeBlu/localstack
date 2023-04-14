@@ -25,7 +25,7 @@ def receive_assert_delete(queue_url, assertions, sqs_client=None, required_subje
 
 def test_sqs_queue_names():
     sqs_client = aws_stack.connect_to_service('sqs')
-    queue_name = '%s.fifo' % short_uid()
+    queue_name = f'{short_uid()}.fifo'
     # make sure we can create *.fifo queues
     queue_url = sqs_client.create_queue(QueueName=queue_name, Attributes={'FifoQueue': 'true'})['QueueUrl']
     sqs_client.delete_queue(QueueUrl=queue_url)
@@ -48,11 +48,7 @@ def test_sns_to_sqs():
 
     # receive, assert, and delete message from SQS
     queue_url = queue_info['QueueUrl']
-    assertions = []
-    # make sure we receive the correct topic ARN in notifications
-    assertions.append({'TopicArn': topic_info['TopicArn']})
-    # make sure the notification contains message attributes
-    assertions.append({'Value': test_value})
+    assertions = [{'TopicArn': topic_info['TopicArn']}, {'Value': test_value}]
     receive_assert_delete(queue_url, assertions, sqs_client)
 
 

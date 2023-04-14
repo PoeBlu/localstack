@@ -3,7 +3,7 @@ import unittest
 from localstack.services.firehose import firehose_api
 from localstack.utils.common import short_uid
 
-TEST_STREAM_NAME = 'firehose_test_' + short_uid()
+TEST_STREAM_NAME = f'firehose_test_{short_uid()}'
 TEST_TAG_1 = {'Key': 'MyTag', 'Value': 'TestValue'}
 TEST_TAG_2 = {'Key': 'AnotherTag', 'Value': 'AnotherValue'}
 TEST_TAGS = [TEST_TAG_1, TEST_TAG_2]

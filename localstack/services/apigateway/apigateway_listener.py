@@ -36,9 +36,9 @@ class ProxyListenerApiGateway(ProxyListener):
 
         if re.match(PATH_REGEX_USER_REQUEST, path):
             search_match = re.search(PATH_REGEX_USER_REQUEST, path)
-            api_id = search_match.group(1)
-            stage = search_match.group(2)
-            relative_path_w_query_params = '/%s' % search_match.group(3)
+            api_id = search_match[1]
+            stage = search_match[2]
+            relative_path_w_query_params = f'/{search_match[3]}'
 
             relative_path, query_string_params = extract_query_string_params(path=relative_path_w_query_params)
 
@@ -46,7 +46,7 @@ class ProxyListenerApiGateway(ProxyListener):
             try:
                 extracted_path, resource = get_resource_for_path(path=relative_path, path_map=path_map)
             except Exception:
-                return make_error('Unable to find path %s' % path, 404)
+                return make_error(f'Unable to find path {path}', 404)
 
             integrations = resource.get('resourceMethods', {})
             integration = integrations.get(method, {})
@@ -57,7 +57,7 @@ class ProxyListenerApiGateway(ProxyListener):
                 if method == 'OPTIONS' and 'Origin' in headers:
                     # default to returning CORS headers if this is an OPTIONS request
                     return get_cors_response(headers)
-                return make_error('Unable to find integration for path %s' % path, 404)
+                return make_error(f'Unable to find integration for path {path}', 404)
 
             uri = integration.get('uri')
             if method == 'POST' and integration['type'] == 'AWS':
@@ -68,24 +68,24 @@ class ProxyListenerApiGateway(ProxyListener):
                     # forward records to target kinesis stream
                     headers = aws_stack.mock_aws_request_headers(service='kinesis')
                     headers['X-Amz-Target'] = kinesis_listener.ACTION_PUT_RECORDS
-                    result = common.make_http_request(url=TEST_KINESIS_URL,
-                        method='POST', data=new_request, headers=headers)
-                    return result
-
+                    return common.make_http_request(
+                        url=TEST_KINESIS_URL,
+                        method='POST',
+                        data=new_request,
+                        headers=headers,
+                    )
                 elif uri.startswith('arn:aws:apigateway:') and ':sqs:path' in uri:
                     template = integration['requestTemplates'][APPLICATION_JSON]
                     account_id, queue = uri.split('/')[-2:]
                     region_name = uri.split(':')[3]
 
-                    new_request = aws_stack.render_velocity_template(template, data) + '&QueueName=%s' % queue
+                    new_request = f'{aws_stack.render_velocity_template(template, data)}&QueueName={queue}'
                     headers = aws_stack.mock_aws_request_headers(service='sqs', region_name=region_name)
 
-                    url = urljoin(TEST_SQS_URL, '%s/%s?%s' % (account_id, queue, new_request))
-                    result = common.make_http_request(url, method='GET', headers=headers)
-                    return result
-
+                    url = urljoin(TEST_SQS_URL, f'{account_id}/{queue}?{new_request}')
+                    return common.make_http_request(url, method='GET', headers=headers)
                 else:
-                    msg = 'API Gateway action uri "%s" not yet implemented' % uri
+                    msg = f'API Gateway action uri "{uri}" not yet implemented'
                     LOGGER.warning(msg)
                     return make_error(msg, 404)
 
@@ -139,7 +139,7 @@ class ProxyListenerApiGateway(ProxyListener):
                         response._content = '{}'
                     return response
                 else:
-                    msg = 'API Gateway action uri "%s" not yet implemented' % uri
+                    msg = f'API Gateway action uri "{uri}" not yet implemented'
                     LOGGER.warning(msg)
                     return make_error(msg, 404)
 
@@ -147,12 +147,9 @@ class ProxyListenerApiGateway(ProxyListener):
                 function = getattr(requests, method.lower())
                 if isinstance(data, dict):
                     data = json.dumps(data)
-                result = function(integration['uri'], data=data, headers=headers)
-                return result
-
+                return function(integration['uri'], data=data, headers=headers)
             else:
-                msg = ('API Gateway integration type "%s" for method "%s" not yet implemented' %
-                       (integration['type'], method))
+                msg = f"""API Gateway integration type "{integration['type']}" for method "{method}" not yet implemented"""
                 LOGGER.warning(msg)
                 return make_error(msg, 404)
 
@@ -165,13 +162,15 @@ class ProxyListenerApiGateway(ProxyListener):
 
     def return_response(self, method, path, data, headers, response):
         # fix backend issue (missing support for API documentation)
-        if re.match(r'/restapis/[^/]+/documentation/versions', path):
-            if response.status_code == 404:
-                response = Response()
-                response.status_code = 200
-                result = {'position': '1', 'items': []}
-                response._content = json.dumps(result)
-                return response
+        if (
+            re.match(r'/restapis/[^/]+/documentation/versions', path)
+            and response.status_code == 404
+        ):
+            response = Response()
+            response.status_code = 200
+            result = {'position': '1', 'items': []}
+            response._content = json.dumps(result)
+            return response
 
         # publish event
         if method == 'POST' and path == '/restapis':

@@ -26,7 +26,7 @@ def check_s3(expect_shutdown=False, print_error=False):
         out = aws_stack.connect_to_service(service_name='s3').list_buckets()
     except Exception as e:
         if print_error:
-            LOGGER.error('S3 health check failed: %s %s' % (e, traceback.format_exc()))
+            LOGGER.error(f'S3 health check failed: {e} {traceback.format_exc()}')
     if expect_shutdown:
         assert out is None
     else:
@@ -36,8 +36,8 @@ def check_s3(expect_shutdown=False, print_error=False):
 def start_s3(port=None, backend_port=None, asynchronous=None, update_listener=None):
     port = port or config.PORT_S3
     backend_port = DEFAULT_PORT_S3_BACKEND
-    cmd = '%s "%s" s3 -p %s -H 0.0.0.0' % (sys.executable, __file__, backend_port)
-    print('Starting mock S3 (%s port %s)...' % (get_service_protocol(), port))
+    cmd = f'{sys.executable} "{__file__}" s3 -p {backend_port} -H 0.0.0.0'
+    print(f'Starting mock S3 ({get_service_protocol()} port {port})...')
     start_proxy_for_service('s3', port, backend_port, update_listener)
     env_vars = {'PYTHONPATH': ':'.join(sys.path)}
     return do_run(cmd, asynchronous, env_vars=env_vars)

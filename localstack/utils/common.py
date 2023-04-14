@@ -64,10 +64,7 @@ class CustomEncoder(json.JSONEncoder):
 
     def default(self, o):
         if isinstance(o, decimal.Decimal):
-            if o % 1 > 0:
-                return float(o)
-            else:
-                return int(o)
+            return float(o) if o % 1 > 0 else int(o)
         if isinstance(o, datetime):
             return str(o)
         if isinstance(o, six.binary_type):
@@ -127,9 +124,9 @@ class ShellCommandThread(FuncThread):
                 self.process.communicate()
         except Exception as e:
             if self.process and not self.quiet:
-                LOG.warning('Shell command error "%s": %s' % (e, self.cmd))
+                LOG.warning(f'Shell command error "{e}": {self.cmd}')
         if self.process and not self.quiet and self.process.returncode != 0:
-            LOG.warning('Shell command exit code "%s": %s' % (self.process.returncode, self.cmd))
+            LOG.warning(f'Shell command exit code "{self.process.returncode}": {self.cmd}')
 
     def is_killed(self):
         if not self.process:
@@ -149,7 +146,7 @@ class ShellCommandThread(FuncThread):
         import psutil
 
         if not self.process:
-            LOG.warning("No process found for command '%s'" % self.cmd)
+            LOG.warning(f"No process found for command '{self.cmd}'")
             return
 
         parent_pid = self.process.pid
@@ -161,7 +158,7 @@ class ShellCommandThread(FuncThread):
             self.process = None
         except Exception:
             if not quiet:
-                LOG.warning('Unable to kill process with pid %s' % parent_pid)
+                LOG.warning(f'Unable to kill process with pid {parent_pid}')
 
 
 class JsonObject(object):
@@ -194,9 +191,7 @@ class JsonObject(object):
 
     @classmethod
     def as_dict(cls, obj):
-        if isinstance(obj, dict):
-            return obj
-        return obj.to_dict()
+        return obj if isinstance(obj, dict) else obj.to_dict()
 
     def __str__(self):
         return self.to_json()
@@ -290,13 +285,11 @@ class CaptureOutput(object):
 def is_string(s, include_unicode=True):
     if isinstance(s, str):
         return True
-    if include_unicode and isinstance(s, six.text_type):
-        return True
-    return False
+    return bool(include_unicode and isinstance(s, six.text_type))
 
 
 def is_string_or_bytes(s):
-    return is_string(s) or isinstance(s, six.string_types) or isinstance(s, bytes)
+    return is_string(s) or isinstance(s, (six.string_types, bytes))
 
 
 def md5(string):
@@ -333,7 +326,7 @@ def is_port_open(port_or_url, http_path=None, expect_success=True):
             return False
     if not http_path:
         return True
-    url = '%s://%s:%s%s' % (protocol, host, port, http_path)
+    url = f'{protocol}://{host}:{port}{http_path}'
     try:
         response = safe_requests.get(url)
         return not expect_success or response.status_code < 400
@@ -375,7 +368,7 @@ def retry(function, retries=3, sleep=1, sleep_before=0, **kwargs):
     raise_error = None
     if sleep_before > 0:
         time.sleep(sleep_before)
-    for i in range(0, retries + 1):
+    for _ in range(retries + 1):
         try:
             return function(**kwargs)
         except Exception as error:
@@ -398,8 +391,9 @@ def merge_recursive(source, destination):
             merge_recursive(value, node)
         else:
             if not isinstance(destination, dict):
-                LOG.warning('Destination for merging %s=%s is not dict: %s' %
-                    (key, value, destination))
+                LOG.warning(
+                    f'Destination for merging {key}={value} is not dict: {destination}'
+                )
             destination[key] = value
     return destination
 
@@ -412,7 +406,7 @@ def merge_dicts(*dicts, **kwargs):
         if d is None and 'default' in kwargs:
             return kwargs['default']
         if d:
-            result.update(d)
+            result |= d
     return result
 
 
@@ -473,7 +467,9 @@ def ensure_readable(file_path, default_perms=None):
         with open(file_path, 'rb'):
             pass
     except Exception:
-        LOG.info('Updating permissions as file is currently not readable: %s' % file_path)
+        LOG.info(
+            f'Updating permissions as file is currently not readable: {file_path}'
+        )
         os.chmod(file_path, default_perms)
 
 
@@ -522,19 +518,21 @@ def download(url, path, verify_ssl=True):
     try:
         if not os.path.exists(os.path.dirname(path)):
             os.makedirs(os.path.dirname(path))
-        LOG.debug('Starting download from %s to %s (%s bytes)' % (url, path, r.headers.get('content-length')))
+        LOG.debug(
+            f"Starting download from {url} to {path} ({r.headers.get('content-length')} bytes)"
+        )
         with open(path, 'wb') as f:
             for chunk in r.iter_content(DOWNLOAD_CHUNK_SIZE):
                 total += len(chunk)
                 if chunk:  # filter out keep-alive new chunks
                     f.write(chunk)
-                    LOG.debug('Writing %s bytes (total %s) to %s' % (len(chunk), total, path))
+                    LOG.debug(f'Writing {len(chunk)} bytes (total {total}) to {path}')
                 else:
-                    LOG.debug('Empty chunk %s (total %s) from %s' % (chunk, total, url))
+                    LOG.debug(f'Empty chunk {chunk} (total {total}) from {url}')
             f.flush()
             os.fsync(f)
     finally:
-        LOG.debug('Done downloading %s, response code %s' % (url, r.status_code))
+        LOG.debug(f'Done downloading {url}, response code {r.status_code}')
         r.close()
         s.close()
 
@@ -547,7 +545,7 @@ def parse_chunked_data(data):
         length = re.match(r'^([0-9a-zA-Z]+)\r\n.*', data)
         if not length:
             break
-        length = length.group(1).lower()
+        length = length[1].lower()
         length = int(length, 16)
         data = data.partition('\r\n')[2]
         chunks.append(data[:length])
@@ -588,7 +586,7 @@ def is_linux():
 
 
 def short_uid():
-    return str(uuid.uuid4())[0:8]
+    return str(uuid.uuid4())[:8]
 
 
 def json_safe(item):
@@ -604,20 +602,16 @@ def fix_json_keys(item):
     """ make sure the keys of a JSON are strings (not binary type or other) """
     item_copy = item
     if isinstance(item, list):
-        item_copy = []
-        for i in item:
-            item_copy.append(fix_json_keys(i))
+        item_copy = [fix_json_keys(i) for i in item]
     if isinstance(item, dict):
-        item_copy = {}
-        for k, v in item.items():
-            item_copy[to_str(k)] = fix_json_keys(v)
+        item_copy = {to_str(k): fix_json_keys(v) for k, v in item.items()}
     return item_copy
 
 
 def save_file(file, content, append=False):
     mode = 'a' if append else 'w+'
     if not isinstance(content, six.string_types):
-        mode = mode + 'b'
+        mode += 'b'
     with open(file, mode) as f:
         f.write(content)
         f.flush()
@@ -709,7 +703,7 @@ def unzip(path, target_dir):
     try:
         zip_ref = zipfile.ZipFile(path, 'r')
     except Exception as e:
-        LOG.warning('Unable to open zip file: %s: %s' % (path, e))
+        LOG.warning(f'Unable to open zip file: {path}: {e}')
         raise e
     # Make sure to preserve file permissions in the zip file
     # https://www.burgundywall.com/post/preserving-file-perms-with-python-zipfile-module
@@ -761,14 +755,14 @@ def generate_ssl_cert(target_file=None, overwrite=False, random=False):
     from OpenSSL import crypto
 
     if os.path.exists(target_file):
-        key_file_name = '%s.key' % target_file
-        cert_file_name = '%s.crt' % target_file
+        key_file_name = f'{target_file}.key'
+        cert_file_name = f'{target_file}.crt'
         return target_file, cert_file_name, key_file_name
     if random and target_file:
         if '.' in target_file:
-            target_file = target_file.replace('.', '.%s.' % short_uid(), 1)
+            target_file = target_file.replace('.', f'.{short_uid()}.', 1)
         else:
-            target_file = '%s.%s' % (target_file, short_uid())
+            target_file = f'{target_file}.{short_uid()}'
     if target_file and not overwrite and os.path.exists(target_file):
         return
 
@@ -801,16 +795,14 @@ def generate_ssl_cert(target_file=None, overwrite=False, random=False):
     file_content = '%s\n%s' % (key_file_content, cert_file_content)
     if target_file:
         save_file(target_file, file_content)
-        key_file_name = '%s.key' % target_file
-        cert_file_name = '%s.crt' % target_file
+        key_file_name = f'{target_file}.key'
+        cert_file_name = f'{target_file}.crt'
         save_file(key_file_name, key_file_content)
         save_file(cert_file_name, cert_file_content)
         TMP_FILES.append(target_file)
         TMP_FILES.append(key_file_name)
         TMP_FILES.append(cert_file_name)
-        if random:
-            return target_file, cert_file_name, key_file_name
-        return file_content
+        return (target_file, cert_file_name, key_file_name) if random else file_content
     return file_content
 
 
@@ -819,7 +811,7 @@ def run_safe(_python_lambda, print_error=False, **kwargs):
         return _python_lambda(**kwargs)
     except Exception as e:
         if print_error:
-            LOG.warning('Unable to execute function: %s' % e)
+            LOG.warning(f'Unable to execute function: {e}')
 
 
 def run_cmd_safe(**kwargs):
@@ -842,14 +834,12 @@ def run(cmd, cache_duration_secs=0, **kwargs):
         mod_time = os.path.getmtime(cache_file)
         time_now = now()
         if mod_time > (time_now - cache_duration_secs):
-            f = open(cache_file)
-            result = f.read()
-            f.close()
+            with open(cache_file) as f:
+                result = f.read()
             return result
     result = do_run(cmd)
-    f = open(cache_file, 'w+')
-    f.write(result)
-    f.close()
+    with open(cache_file, 'w+') as f:
+        f.write(result)
     clean_cache()
     return result
 
@@ -930,7 +920,7 @@ def clean_cache(file_pattern=CACHE_FILE_PATTERN,
 
 
 def truncate(data, max_length=100):
-    return (data[:max_length] + '...') if len(data) > max_length else data
+    return f'{data[:max_length]}...' if len(data) > max_length else data
 
 
 def parallelize(func, list, size=None):

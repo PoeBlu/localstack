@@ -65,7 +65,7 @@ class Environment(object):
                 return PREDEFINED_ENVIRONMENTS[s]
             parts = [get_local_region(), s]
         if len(parts) > 2:
-            raise Exception('Invalid environment string "%s"' % s)
+            raise Exception(f'Invalid environment string "{s}"')
         region = parts[0]
         prefix = parts[1]
         return Environment(region=region, prefix=prefix)
@@ -79,7 +79,7 @@ class Environment(object):
         return result
 
     def __str__(self):
-        return '%s:%s' % (self.region, self.prefix)
+        return f'{self.region}:{self.prefix}'
 
 
 PREDEFINED_ENVIRONMENTS = {
@@ -101,19 +101,16 @@ def get_environment(env=None, region_name=None):
     Additionally, parameter `region_name` can be used to override DEFAULT_REGION.
     """
     if not env:
-        if 'ENV' in os.environ:
-            env = os.environ['ENV']
-        else:
-            env = ENV_DEV
+        env = os.environ.get('ENV', ENV_DEV)
     elif not is_string(env) and not isinstance(env, Environment):
-        raise Exception('Invalid environment: %s' % env)
+        raise Exception(f'Invalid environment: {env}')
 
     if is_string(env):
         env = Environment.from_string(env)
     if region_name:
         env.region = region_name
     if not env.region:
-        raise Exception('Invalid region in environment: "%s"' % env)
+        raise Exception(f'Invalid region in environment: "{env}"')
     return env
 
 
@@ -157,11 +154,11 @@ def get_local_region():
 def get_local_service_url(service_name_or_port):
     """ Return the local service URL for the given service name or port. """
     if isinstance(service_name_or_port, int):
-        return '%s://%s:%s' % (get_service_protocol(), LOCALHOST, service_name_or_port)
+        return f'{get_service_protocol()}://{LOCALHOST}:{service_name_or_port}'
     service_name = service_name_or_port
     if service_name == 's3api':
         service_name = 's3'
-    return os.environ['TEST_%s_URL' % (service_name.upper().replace('-', '_'))]
+    return os.environ[f"TEST_{service_name.upper().replace('-', '_')}_URL"]
 
 
 def is_service_enabled(service_name):
@@ -187,10 +184,9 @@ def connect_to_service(service_name, client=True, env=None, region_name=None, en
         my_session = get_boto3_session()
         method = my_session.client if client else my_session.resource
         verify = True
-        if not endpoint_url:
-            if is_local_env(env):
-                endpoint_url = get_local_service_url(service_name)
-                verify = False
+        if not endpoint_url and is_local_env(env):
+            endpoint_url = get_local_service_url(service_name)
+            verify = False
         BOTO_CLIENTS_CACHE[cache_key] = method(service_name, region_name=region,
             endpoint_url=endpoint_url, verify=verify, config=config)
 
@@ -257,7 +253,9 @@ def check_valid_region(headers):
     parts = replaced.split('/')
     region = parts[2]
     if region not in config.VALID_REGIONS:
-        raise Exception('Invalid region specified in "Authorization" header: "%s"' % region)
+        raise Exception(
+            f'Invalid region specified in "Authorization" header: "{region}"'
+        )
 
 
 def fix_account_id_in_arns(response, colon_delimiter=':', existing=None, replace=None):
@@ -306,7 +304,7 @@ def get_account_id(account_id=None, env=None):
     env = get_environment(env)
     if is_local_env(env):
         return os.environ['TEST_AWS_ACCOUNT_ID']
-    raise Exception('Unable to determine AWS account ID (%s, %s)' % (account_id, env))
+    raise Exception(f'Unable to determine AWS account ID ({account_id}, {env})')
 
 
 def role_arn(role_name, account_id=None, env=None):
@@ -316,7 +314,7 @@ def role_arn(role_name, account_id=None, env=None):
         return role_name
     env = get_environment(env)
     account_id = get_account_id(account_id, env=env)
-    return 'arn:aws:iam::%s:role/%s' % (account_id, role_name)
+    return f'arn:aws:iam::{account_id}:role/{role_name}'
 
 
 def iam_resource_arn(resource, role=None, env=None):
@@ -328,7 +326,7 @@ def iam_resource_arn(resource, role=None, env=None):
 
 def get_iam_role(resource, env=None):
     env = get_environment(env)
-    return 'role-%s' % resource
+    return f'role-{resource}'
 
 
 def dynamodb_table_arn(table_name, account_id=None, region_name=None):
@@ -338,8 +336,7 @@ def dynamodb_table_arn(table_name, account_id=None, region_name=None):
 
 def dynamodb_stream_arn(table_name, account_id=None):
     account_id = get_account_id(account_id)
-    return ('arn:aws:dynamodb:%s:%s:table/%s/stream/%s' %
-        (get_local_region(), account_id, table_name, timestamp()))
+    return f'arn:aws:dynamodb:{get_local_region()}:{account_id}:table/{table_name}/stream/{timestamp()}'
 
 
 def lambda_function_arn(function_name, account_id=None):
@@ -376,7 +373,7 @@ def fix_arn(arn):
         resource names to ARNs, replacing incorrect regions, account IDs, etc. """
     if arn.startswith('arn:aws:lambda'):
         return lambda_function_arn(lambda_function_name(arn))
-    LOG.warning('Unable to fix/canonicalize ARN: %s' % arn)
+    LOG.warning(f'Unable to fix/canonicalize ARN: {arn}')
     return arn
 
 
@@ -387,16 +384,16 @@ def cognito_user_pool_arn(user_pool_id, account_id=None, region_name=None):
 
 def kinesis_stream_arn(stream_name, account_id=None):
     account_id = get_account_id(account_id)
-    return 'arn:aws:kinesis:%s:%s:stream/%s' % (get_local_region(), account_id, stream_name)
+    return f'arn:aws:kinesis:{get_local_region()}:{account_id}:stream/{stream_name}'
 
 
 def firehose_stream_arn(stream_name, account_id=None):
     account_id = get_account_id(account_id)
-    return ('arn:aws:firehose:%s:%s:deliverystream/%s' % (get_local_region(), account_id, stream_name))
+    return f'arn:aws:firehose:{get_local_region()}:{account_id}:deliverystream/{stream_name}'
 
 
 def s3_bucket_arn(bucket_name, account_id=None):
-    return 'arn:aws:s3:::%s' % (bucket_name)
+    return f'arn:aws:s3:::{bucket_name}'
 
 
 def _resource_arn(name, pattern, account_id=None, region_name=None):
@@ -417,13 +414,13 @@ def create_sqs_queue(queue_name, env=None):
 def sqs_queue_arn(queue_name, account_id=None, region_name=None):
     account_id = get_account_id(account_id)
     region_name = region_name or config.DEFAULT_REGION
-    return ('arn:aws:sqs:%s:%s:%s' % (region_name, account_id, queue_name))
+    return f'arn:aws:sqs:{region_name}:{account_id}:{queue_name}'
 
 
 def apigateway_restapi_arn(api_id, account_id=None, region_name=None):
     account_id = get_account_id(account_id)
     region_name = region_name or config.DEFAULT_REGION
-    return ('arn:aws:apigateway:%s:%s:/restapis/%s' % (region_name, account_id, api_id))
+    return f'arn:aws:apigateway:{region_name}:{account_id}:/restapis/{api_id}'
 
 
 def sqs_queue_name(queue_arn):
@@ -433,7 +430,7 @@ def sqs_queue_name(queue_arn):
 
 def sns_topic_arn(topic_name, account_id=None):
     account_id = get_account_id(account_id)
-    return ('arn:aws:sns:%s:%s:%s' % (get_local_region(), account_id, topic_name))
+    return f'arn:aws:sns:{get_local_region()}:{account_id}:{topic_name}'
 
 
 def get_sqs_queue_url(queue_arn):
@@ -448,8 +445,7 @@ def sqs_receive_message(queue_arn):
     region_name = extract_region_from_arn(queue_arn)
     client = connect_to_service('sqs', region_name=region_name)
     queue_url = get_sqs_queue_url(queue_arn)
-    response = client.receive_message(QueueUrl=queue_url)
-    return response
+    return client.receive_message(QueueUrl=queue_url)
 
 
 def mock_aws_request_headers(service='dynamodb', region_name=None):
@@ -460,16 +456,17 @@ def mock_aws_request_headers(service='dynamodb', region_name=None):
         ctype = APPLICATION_X_WWW_FORM_URLENCODED
     access_key = get_boto3_credentials().access_key
     region_name = region_name or config.DEFAULT_REGION
-    headers = {
+    return {
         'Content-Type': ctype,
         'Accept-Encoding': 'identity',
         'X-Amz-Date': '20160623T103251Z',
-        'Authorization': ('AWS4-HMAC-SHA256 ' +
-            'Credential=%s/20160623/%s/%s/aws4_request, ' +
-            'SignedHeaders=content-type;host;x-amz-date;x-amz-target, Signature=1234') % (
-                access_key, region_name, service)
+        'Authorization': (
+            'AWS4-HMAC-SHA256 '
+            + 'Credential=%s/20160623/%s/%s/aws4_request, '
+            + 'SignedHeaders=content-type;host;x-amz-date;x-amz-target, Signature=1234'
+        )
+        % (access_key, region_name, service),
     }
-    return headers
 
 
 def dynamodb_get_item_raw(request):
@@ -524,12 +521,11 @@ def get_apigateway_integration(api_id, method, path, env=None):
         if r['path'] == path:
             resource_id = r['id']
     if not resource_id:
-        raise Exception('Unable to find apigateway integration for path "%s"' % path)
+        raise Exception(f'Unable to find apigateway integration for path "{path}"')
 
-    integration = apigateway.get_integration(
+    return apigateway.get_integration(
         restApiId=api_id, resourceId=resource_id, httpMethod=method
     )
-    return integration
 
 
 def get_apigateway_resource_for_path(api_id, path, parent=None, resources=None):
@@ -538,12 +534,21 @@ def get_apigateway_resource_for_path(api_id, path, parent=None, resources=None):
         resources = apigateway.get_resources(restApiId=api_id, limit=100)
     if not isinstance(path, list):
         path = path.split('/')
-    if not path:
-        return parent
-    for resource in resources:
-        if resource['pathPart'] == path[0] and (not parent or parent['id'] == resource['parentId']):
-            return get_apigateway_resource_for_path(api_id, path[1:], parent=resource, resources=resources)
-    return None
+    return (
+        next(
+            (
+                get_apigateway_resource_for_path(
+                    api_id, path[1:], parent=resource, resources=resources
+                )
+                for resource in resources
+                if resource['pathPart'] == path[0]
+                and (not parent or parent['id'] == resource['parentId'])
+            ),
+            None,
+        )
+        if path
+        else parent
+    )
 
 
 def get_apigateway_path_for_resource(api_id, resource_id, path_suffix='', resources=None, region_name=None):
@@ -554,14 +559,21 @@ def get_apigateway_path_for_resource(api_id, resource_id, path_suffix='', resour
     path_part = target_resource.get('pathPart', '')
     if path_suffix:
         if path_part:
-            path_suffix = '%s/%s' % (path_part, path_suffix)
+            path_suffix = f'{path_part}/{path_suffix}'
     else:
         path_suffix = path_part
     parent_id = target_resource.get('parentId')
-    if not parent_id:
-        return '/%s' % path_suffix
-    return get_apigateway_path_for_resource(api_id, parent_id,
-        path_suffix=path_suffix, resources=resources, region_name=region_name)
+    return (
+        get_apigateway_path_for_resource(
+            api_id,
+            parent_id,
+            path_suffix=path_suffix,
+            resources=resources,
+            region_name=region_name,
+        )
+        if parent_id
+        else f'/{path_suffix}'
+    )
 
 
 def create_api_gateway(name, description=None, resources=None, stage_name=None,
@@ -574,9 +586,9 @@ def create_api_gateway(name, description=None, resources=None, stage_name=None,
     if not usage_plan_name:
         usage_plan_name = 'Basic Usage'
     if not description:
-        description = 'Test description for API "%s"' % name
+        description = f'Test description for API "{name}"'
 
-    LOG.info('Creating API resources under API Gateway "%s".' % name)
+    LOG.info(f'Creating API resources under API Gateway "{name}".')
     api = client.create_rest_api(name=name, description=description)
     # list resources
     api_id = api['id']
@@ -652,8 +664,7 @@ def create_api_gateway_integrations(api_id, resource_id, method,
 
 
 def apigateway_invocations_arn(lambda_uri):
-    return ('arn:aws:apigateway:%s:lambda:path/2015-03-31/functions/%s/invocations' %
-        (config.DEFAULT_REGION, lambda_uri))
+    return f'arn:aws:apigateway:{config.DEFAULT_REGION}:lambda:path/2015-03-31/functions/{lambda_uri}/invocations'
 
 
 def get_elasticsearch_endpoint(domain=None, region_name=None):
@@ -663,8 +674,7 @@ def get_elasticsearch_endpoint(domain=None, region_name=None):
     # get endpoint from API
     es_client = connect_to_service(service_name='es', region_name=env.region)
     info = es_client.describe_elasticsearch_domain(DomainName=domain)
-    endpoint = 'https://%s' % info['DomainStatus']['Endpoint']
-    return endpoint
+    return f"https://{info['DomainStatus']['Endpoint']}"
 
 
 def connect_elasticsearch(endpoint=None, domain=None, region_name=None, env=None):

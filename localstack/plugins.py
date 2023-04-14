@@ -81,6 +81,6 @@ def register_localstack_plugins():
         register_plugin(Plugin('ec2',
             start=start_ec2))
     except Exception as e:
-        print('Unable to register plugins: %s' % e)
+        print(f'Unable to register plugins: {e}')
         sys.stdout.flush()
         raise e

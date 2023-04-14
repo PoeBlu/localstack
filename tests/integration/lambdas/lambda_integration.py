@@ -93,9 +93,7 @@ def handler(event, context):
 
 
 def deserialize_event(event):
-    # Deserialize into Python dictionary and extract the "NewImage" (the new version of the full ddb document)
-    ddb = event.get('dynamodb')
-    if ddb:
+    if ddb := event.get('dynamodb'):
         result = {
             '__action_type': event.get('eventName'),
         }
@@ -107,13 +105,11 @@ def deserialize_event(event):
             result['new_image'] = ddb_deserializer.deserialize({'M': ddb.get('NewImage')})
 
         return result
-    kinesis = event.get('kinesis')
-    if kinesis:
+    if kinesis := event.get('kinesis'):
         assert kinesis['sequenceNumber']
         kinesis['data'] = json.loads(to_str(base64.b64decode(kinesis['data'])))
         return kinesis
-    sqs = event.get('sqs')
-    if sqs:
+    if sqs := event.get('sqs'):
         result = {'data': event['body']}
         return result
     return event.get('Sns')

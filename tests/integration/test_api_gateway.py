@@ -109,9 +109,8 @@ class TestAPIGatewayIntegrations(unittest.TestCase):
 
     def test_api_gateway_http_integration(self):
         test_port = 12123
-        backend_url = 'http://localhost:%s%s' % (test_port, self.API_PATH_HTTP_BACKEND)
+        backend_url = f'http://localhost:{test_port}{self.API_PATH_HTTP_BACKEND}'
 
-        # create target HTTP backend
         class TestListener(ProxyListener):
 
             def forward_request(self, **kwargs):
@@ -197,7 +196,7 @@ class TestAPIGatewayIntegrations(unittest.TestCase):
 
         # make test request to gateway and check response
         path = path.replace('{test_param1}', 'foo1')
-        path = path + '?foo=foo&bar=bar&bar=baz'
+        path = f'{path}?foo=foo&bar=bar&bar=baz'
 
         url = INBOUND_GATEWAY_URL_PATTERN.format(
             api_id=api_id,
@@ -290,20 +289,23 @@ class TestAPIGatewayIntegrations(unittest.TestCase):
     # =====================================================================
 
     def connect_api_gateway_to_kinesis(self, gateway_name, kinesis_stream):
-        resources = {}
         template = self.APIGATEWAY_DATA_INBOUND_TEMPLATE % (kinesis_stream)
         resource_path = self.API_PATH_DATA_INBOUND.replace('/', '')
-        resources[resource_path] = [{
-            'httpMethod': 'POST',
-            'authorizationType': 'NONE',
-            'integrations': [{
-                'type': 'AWS',
-                'uri': 'arn:aws:apigateway:%s:kinesis:action/PutRecords' % DEFAULT_REGION,
-                'requestTemplates': {
-                    'application/json': template
+        resources = {
+            resource_path: [
+                {
+                    'httpMethod': 'POST',
+                    'authorizationType': 'NONE',
+                    'integrations': [
+                        {
+                            'type': 'AWS',
+                            'uri': f'arn:aws:apigateway:{DEFAULT_REGION}:kinesis:action/PutRecords',
+                            'requestTemplates': {'application/json': template},
+                        }
+                    ],
                 }
-            }]
-        }]
+            ]
+        }
         return aws_stack.create_api_gateway(
             name=gateway_name,
             resources=resources,
@@ -315,9 +317,8 @@ class TestAPIGatewayIntegrations(unittest.TestCase):
             methods = ['GET', 'POST']
         if not path:
             path = '/'
-        resources = {}
         resource_path = path.replace('/', '')
-        resources[resource_path] = []
+        resources = {resource_path: []}
         for method in methods:
             resources[resource_path].append({
                 'httpMethod': method,
@@ -337,9 +338,8 @@ class TestAPIGatewayIntegrations(unittest.TestCase):
             methods = ['GET', 'POST']
         if not path:
             path = '/'
-        resources = {}
         resource_path = path.lstrip('/')
-        resources[resource_path] = []
+        resources = {resource_path: []}
         for method in methods:
             resources[resource_path].append({
                 'httpMethod': method,

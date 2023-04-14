@@ -69,7 +69,7 @@ APPLICATION_JSON = 'application/json'
 APPLICATION_X_WWW_FORM_URLENCODED = 'application/x-www-form-urlencoded'
 
 # Lambda defaults
-LAMBDA_TEST_ROLE = 'arn:aws:iam::%s:role/lambda-test-role' % TEST_AWS_ACCOUNT_ID
+LAMBDA_TEST_ROLE = f'arn:aws:iam::{TEST_AWS_ACCOUNT_ID}:role/lambda-test-role'
 
 # installation constants
 ELASTICSEARCH_JAR_URL = 'https://artifacts.elastic.co/downloads/elasticsearch/elasticsearch-6.7.0.zip'

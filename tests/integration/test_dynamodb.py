@@ -27,10 +27,10 @@ class DynamoDBIntegrationTest (unittest.TestCase):
             'id2': {PARTITION_KEY: 'id2', 'data': 'foobar123 £'},
             'id3': {PARTITION_KEY: 'id3', 'data': 'foobar123 ¢'}
         }
-        for k, item in items.items():
+        for item in items.values():
             table.put_item(Item=item)
 
-        for item_id in items.keys():
+        for item_id in items:
             item = table.get_item(Key={PARTITION_KEY: item_id})['Item']
             # need to fix up the JSON and convert str to unicode for Python 2
             item1 = json_safe(item)
@@ -49,8 +49,8 @@ class DynamoDBIntegrationTest (unittest.TestCase):
 
         # Create a large amount of items
         num_items = 20
-        for i in range(0, num_items):
-            item = {PARTITION_KEY: 'id%s' % i, 'data1': 'foobar123 ' * 1000}
+        for i in range(num_items):
+            item = {PARTITION_KEY: f'id{i}', 'data1': 'foobar123 ' * 1000}
             table.put_item(Item=item)
 
         # Retrieve the items. The data will be transmitted to the client with chunked transfer encoding
@@ -73,7 +73,7 @@ class DynamoDBIntegrationTest (unittest.TestCase):
             'id2': {PARTITION_KEY: 'id2', 'data': 'TIME'},
             'id3': {PARTITION_KEY: 'id3', 'data': 'TO LIVE!'}
         }
-        for k, item in items.items():
+        for item in items.values():
             table.put_item(Item=item)
 
         # Describe TTL when still unset.
@@ -147,7 +147,7 @@ class DynamoDBIntegrationTest (unittest.TestCase):
 
         table = dynamodb.Table(TEST_DDB_TABLE_NAME_4)
 
-        expected_arn_prefix = 'arn:aws:dynamodb:' + aws_stack.get_local_region()
+        expected_arn_prefix = f'arn:aws:dynamodb:{aws_stack.get_local_region()}'
 
         assert table.table_arn.startswith(expected_arn_prefix)
         assert table.latest_stream_arn.startswith(expected_arn_prefix)

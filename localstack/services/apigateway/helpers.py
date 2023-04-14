@@ -42,10 +42,9 @@ def make_error(message, code=400):
 
 
 def get_api_id_from_path(path):
-    match = re.match(PATH_REGEX_SUB, path)
-    if match:
-        return match.group(1)
-    return re.match(PATH_REGEX_MAIN, path).group(1)
+    if match := re.match(PATH_REGEX_SUB, path):
+        return match[1]
+    return re.match(PATH_REGEX_MAIN, path)[1]
 
 
 def get_authorizers(path):
@@ -65,7 +64,7 @@ def add_authorizer(path, data):
     if '_links' not in result:
         result['_links'] = {}
     result['_links']['self'] = {
-        'href': '/restapis/%s/authorizers/%s' % (api_id, result['id'])
+        'href': f"/restapis/{api_id}/authorizers/{result['id']}"
     }
     AUTHORIZERS[result['id']] = result
     return result
@@ -78,7 +77,9 @@ def handle_authorizers(method, path, data, headers):
     elif method == 'POST':
         result = add_authorizer(path, data)
     else:
-        return make_error('Not implemented for API Gateway authorizers: %s' % method, 404)
+        return make_error(
+            f'Not implemented for API Gateway authorizers: {method}', 404
+        )
     return make_response(result)
 
 
@@ -99,8 +100,7 @@ def extract_path_params(path, extracted_path):
             path_params[path_param_name] = '/'.join(tokenized_path[path_param_position:])
         else:
             path_params[path_param_name] = tokenized_path[path_param_position]
-    path_params = common.json_safe(path_params)
-    return path_params
+    return common.json_safe(path_params)
 
 
 def extract_query_string_params(path):
@@ -108,13 +108,12 @@ def extract_query_string_params(path):
     path = parsed_path.path
     parsed_query_string_params = urlparse.parse_qs(parsed_path.query)
 
-    query_string_params = {}
-    for query_param_name, query_param_values in parsed_query_string_params.items():
-        if len(query_param_values) == 1:
-            query_string_params[query_param_name] = query_param_values[0]
-        else:
-            query_string_params[query_param_name] = query_param_values
-
+    query_string_params = {
+        query_param_name: query_param_values[0]
+        if len(query_param_values) == 1
+        else query_param_values
+        for query_param_name, query_param_values in parsed_query_string_params.items()
+    }
     return [path, query_string_params]
 
 
@@ -146,7 +145,7 @@ def get_resource_for_path(path, path_map):
     for api_path, details in path_map.items():
         api_path_regex = re.sub(r'\{[^\+]+\+\}', r'[^\?#]+', api_path)
         api_path_regex = re.sub(r'\{[^\}]+\}', r'[^/]+', api_path_regex)
-        if re.match(r'^%s$' % api_path_regex, path):
+        if re.match(f'^{api_path_regex}$', path):
             matches.append((api_path, details))
     if not matches:
         return None
@@ -155,29 +154,30 @@ def get_resource_for_path(path, path_map):
         for match in matches:
             if match[0] == path:
                 return match
-        raise Exception('Ambiguous API path %s - matches found: %s' % (path, matches))
+        raise Exception(f'Ambiguous API path {path} - matches found: {matches}')
     return matches[0]
 
 
 def connect_api_gateway_to_sqs(gateway_name, stage_name, queue_arn, path, region_name=None):
-    resources = {}
     template = APIGATEWAY_SQS_DATA_INBOUND_TEMPLATE
     resource_path = path.replace('/', '')
     region_name = region_name or DEFAULT_REGION
     queue_name = aws_stack.sqs_queue_name(queue_arn)
     sqs_region = aws_stack.extract_region_from_arn(queue_arn) or region_name
-    resources[resource_path] = [{
-        'httpMethod': 'POST',
-        'authorizationType': 'NONE',
-        'integrations': [{
-            'type': 'AWS',
-            'uri': 'arn:aws:apigateway:%s:sqs:path/%s/%s' % (
-                sqs_region, TEST_AWS_ACCOUNT_ID, queue_name
-            ),
-            'requestTemplates': {
-                'application/json': template
-            },
-        }]
-    }]
+    resources = {
+        resource_path: [
+            {
+                'httpMethod': 'POST',
+                'authorizationType': 'NONE',
+                'integrations': [
+                    {
+                        'type': 'AWS',
+                        'uri': f'arn:aws:apigateway:{sqs_region}:sqs:path/{TEST_AWS_ACCOUNT_ID}/{queue_name}',
+                        'requestTemplates': {'application/json': template},
+                    }
+                ],
+            }
+        ]
+    }
     return aws_stack.create_api_gateway(
         name=gateway_name, resources=resources, stage_name=stage_name, region_name=region_name)

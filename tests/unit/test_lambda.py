@@ -110,10 +110,11 @@ class TestLambdaAPI(unittest.TestCase):
             result.pop('RevisionId', None)  # we need to remove this, since this is random, so we cannot know its value
             result2.pop('RevisionId', None)  # we need to remove this, since this is random, so we cannot know its value
 
-            expected_result = dict()
-            expected_result['CodeSize'] = self.CODE_SIZE
-            expected_result['CodeSha256'] = self.CODE_SHA_256
-            expected_result['FunctionArn'] = str(lambda_api.func_arn(self.FUNCTION_NAME)) + ':1'
+            expected_result = {
+                'CodeSize': self.CODE_SIZE,
+                'CodeSha256': self.CODE_SHA_256,
+                'FunctionArn': f'{str(lambda_api.func_arn(self.FUNCTION_NAME))}:1',
+            }
             expected_result['FunctionName'] = str(self.FUNCTION_NAME)
             expected_result['Handler'] = str(self.HANDLER)
             expected_result['Runtime'] = str(self.RUNTIME)
@@ -125,7 +126,9 @@ class TestLambdaAPI(unittest.TestCase):
             expected_result['TracingConfig'] = self.TRACING_CONFIG
             expected_result['Version'] = '1'
             expected_result2 = dict(expected_result)
-            expected_result2['FunctionArn'] = str(lambda_api.func_arn(self.FUNCTION_NAME)) + ':2'
+            expected_result2[
+                'FunctionArn'
+            ] = f'{str(lambda_api.func_arn(self.FUNCTION_NAME))}:2'
             expected_result2['Version'] = '2'
             self.assertDictEqual(expected_result, result)
             self.assertDictEqual(expected_result2, result2)
@@ -148,10 +151,11 @@ class TestLambdaAPI(unittest.TestCase):
                 # we need to remove this, since this is random, so we cannot know its value
                 version.pop('RevisionId', None)
 
-            latest_version = dict()
-            latest_version['CodeSize'] = self.CODE_SIZE
-            latest_version['CodeSha256'] = self.CODE_SHA_256
-            latest_version['FunctionArn'] = str(lambda_api.func_arn(self.FUNCTION_NAME)) + ':$LATEST'
+            latest_version = {
+                'CodeSize': self.CODE_SIZE,
+                'CodeSha256': self.CODE_SHA_256,
+                'FunctionArn': f'{str(lambda_api.func_arn(self.FUNCTION_NAME))}:$LATEST',
+            }
             latest_version['FunctionName'] = str(self.FUNCTION_NAME)
             latest_version['Handler'] = str(self.HANDLER)
             latest_version['Runtime'] = str(self.RUNTIME)
@@ -163,10 +167,10 @@ class TestLambdaAPI(unittest.TestCase):
             latest_version['TracingConfig'] = self.TRACING_CONFIG
             latest_version['Version'] = '$LATEST'
             version1 = dict(latest_version)
-            version1['FunctionArn'] = str(lambda_api.func_arn(self.FUNCTION_NAME)) + ':1'
+            version1['FunctionArn'] = f'{str(lambda_api.func_arn(self.FUNCTION_NAME))}:1'
             version1['Version'] = '1'
             version2 = dict(latest_version)
-            version2['FunctionArn'] = str(lambda_api.func_arn(self.FUNCTION_NAME)) + ':2'
+            version2['FunctionArn'] = f'{str(lambda_api.func_arn(self.FUNCTION_NAME))}:2'
             version2['Version'] = '2'
             expected_result = {'Versions': sorted([latest_version, version1, version2],
                                                   key=lambda k: str(k.get('Version')))}
@@ -189,8 +193,12 @@ class TestLambdaAPI(unittest.TestCase):
         result = json.loads(response.get_data())
         result.pop('RevisionId', None)  # we need to remove this, since this is random, so we cannot know its value
 
-        expected_result = {'AliasArn': lambda_api.func_arn(self.FUNCTION_NAME) + ':' + self.ALIAS_NAME,
-                           'FunctionVersion': '1', 'Description': '', 'Name': self.ALIAS_NAME}
+        expected_result = {
+            'AliasArn': f'{lambda_api.func_arn(self.FUNCTION_NAME)}:{self.ALIAS_NAME}',
+            'FunctionVersion': '1',
+            'Description': '',
+            'Name': self.ALIAS_NAME,
+        }
         self.assertDictEqual(expected_result, result)
 
     def test_create_alias_on_non_existant_function_returns_error(self):
@@ -210,7 +218,7 @@ class TestLambdaAPI(unittest.TestCase):
                                     data=data)
         result = json.loads(response.get_data())
 
-        alias_arn = lambda_api.func_arn(self.FUNCTION_NAME) + ':' + self.ALIAS_NAME
+        alias_arn = f'{lambda_api.func_arn(self.FUNCTION_NAME)}:{self.ALIAS_NAME}'
         self.assertEqual(self.ALIASEXISTS_EXCEPTION, result['__type'])
         self.assertEqual(self.ALIASEXISTS_MESSAGE % alias_arn,
                          result['message'])
@@ -228,9 +236,12 @@ class TestLambdaAPI(unittest.TestCase):
         result = json.loads(response.get_data())
         result.pop('RevisionId', None)  # we need to remove this, since this is random, so we cannot know its value
 
-        expected_result = {'AliasArn': lambda_api.func_arn(self.FUNCTION_NAME) + ':' + self.ALIAS_NAME,
-                           'FunctionVersion': '$LATEST', 'Description': 'Test-Description',
-                           'Name': self.ALIAS_NAME}
+        expected_result = {
+            'AliasArn': f'{lambda_api.func_arn(self.FUNCTION_NAME)}:{self.ALIAS_NAME}',
+            'FunctionVersion': '$LATEST',
+            'Description': 'Test-Description',
+            'Name': self.ALIAS_NAME,
+        }
         self.assertDictEqual(expected_result, result)
 
     def test_update_alias_on_non_existant_function_returns_error(self):
@@ -244,7 +255,7 @@ class TestLambdaAPI(unittest.TestCase):
         with self.app.test_request_context():
             self._create_function(self.FUNCTION_NAME)
             result = json.loads(lambda_api.update_alias(self.FUNCTION_NAME, self.ALIAS_NAME).get_data())
-            alias_arn = lambda_api.func_arn(self.FUNCTION_NAME) + ':' + self.ALIAS_NAME
+            alias_arn = f'{lambda_api.func_arn(self.FUNCTION_NAME)}:{self.ALIAS_NAME}'
             self.assertEqual(self.ALIASNOTFOUND_EXCEPTION, result['__type'])
             self.assertEqual(self.ALIASNOTFOUND_MESSAGE % alias_arn, result['message'])
 
@@ -260,9 +271,12 @@ class TestLambdaAPI(unittest.TestCase):
         result = json.loads(response.get_data())
         result.pop('RevisionId', None)  # we need to remove this, since this is random, so we cannot know its value
 
-        expected_result = {'AliasArn': lambda_api.func_arn(self.FUNCTION_NAME) + ':' + self.ALIAS_NAME,
-                           'FunctionVersion': '1', 'Description': '',
-                           'Name': self.ALIAS_NAME}
+        expected_result = {
+            'AliasArn': f'{lambda_api.func_arn(self.FUNCTION_NAME)}:{self.ALIAS_NAME}',
+            'FunctionVersion': '1',
+            'Description': '',
+            'Name': self.ALIAS_NAME,
+        }
         self.assertDictEqual(expected_result, result)
 
     def test_get_alias_on_non_existant_function_returns_error(self):
@@ -276,7 +290,7 @@ class TestLambdaAPI(unittest.TestCase):
         with self.app.test_request_context():
             self._create_function(self.FUNCTION_NAME)
             result = json.loads(lambda_api.get_alias(self.FUNCTION_NAME, self.ALIAS_NAME).get_data())
-            alias_arn = lambda_api.func_arn(self.FUNCTION_NAME) + ':' + self.ALIAS_NAME
+            alias_arn = f'{lambda_api.func_arn(self.FUNCTION_NAME)}:{self.ALIAS_NAME}'
             self.assertEqual(self.ALIASNOTFOUND_EXCEPTION, result['__type'])
             self.assertEqual(self.ALIASNOTFOUND_MESSAGE % alias_arn, result['message'])
 
@@ -294,20 +308,22 @@ class TestLambdaAPI(unittest.TestCase):
         result = json.loads(response.get_data())
         for alias in result['Aliases']:
             alias.pop('RevisionId', None)  # we need to remove this, since this is random, so we cannot know its value
-        expected_result = {'Aliases': [
-            {
-                'AliasArn': lambda_api.func_arn(self.FUNCTION_NAME) + ':' + self.ALIAS_NAME,
-                'FunctionVersion': '1',
-                'Name': self.ALIAS_NAME,
-                'Description': self.ALIAS_NAME
-            },
-            {
-                'AliasArn': lambda_api.func_arn(self.FUNCTION_NAME) + ':' + self.ALIAS2_NAME,
-                'FunctionVersion': '$LATEST',
-                'Name': self.ALIAS2_NAME,
-                'Description': ''
-            }
-        ]}
+        expected_result = {
+            'Aliases': [
+                {
+                    'AliasArn': f'{lambda_api.func_arn(self.FUNCTION_NAME)}:{self.ALIAS_NAME}',
+                    'FunctionVersion': '1',
+                    'Name': self.ALIAS_NAME,
+                    'Description': self.ALIAS_NAME,
+                },
+                {
+                    'AliasArn': f'{lambda_api.func_arn(self.FUNCTION_NAME)}:{self.ALIAS2_NAME}',
+                    'FunctionVersion': '$LATEST',
+                    'Name': self.ALIAS2_NAME,
+                    'Description': '',
+                },
+            ]
+        }
         self.assertDictEqual(expected_result, result)
 
     def test_list_non_existant_function_aliases_returns_error(self):
@@ -425,8 +441,7 @@ class TestLambdaAPI(unittest.TestCase):
 
     def prepareJavaOpts(self, java_opts):
         lambda_executors.config.LAMBDA_JAVA_OPTS = java_opts
-        result = lambda_executors.Util.get_java_opts(10000)
-        return result
+        return lambda_executors.Util.get_java_opts(10000)
 
     def _create_function(self, function_name, tags={}):
         arn = lambda_api.func_arn(function_name)

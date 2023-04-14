@@ -123,7 +123,7 @@ class IntegrationTest(unittest.TestCase):
     # @profiled()
     def test_kinesis_lambda_sns_ddb_sqs_streams(self):
         ddb_lease_table_suffix = '-kclapp'
-        table_name = TEST_TABLE_NAME + 'klsdss' + ddb_lease_table_suffix
+        table_name = f'{TEST_TABLE_NAME}klsdss{ddb_lease_table_suffix}'
         stream_name = TEST_STREAM_NAME
         dynamodb = aws_stack.connect_to_resource('dynamodb')
         dynamodb_service = aws_stack.connect_to_service('dynamodb')
@@ -189,19 +189,18 @@ class IntegrationTest(unittest.TestCase):
         num_batch_items = 3
         num_updates_ddb = num_events_ddb - num_put_new_items - num_put_existing_items - num_batch_items
 
-        LOGGER.info('Putting %s items to table...' % num_events_ddb)
+        LOGGER.info(f'Putting {num_events_ddb} items to table...')
         table = dynamodb.Table(table_name)
-        for i in range(0, num_put_new_items):
-            table.put_item(Item={
-                PARTITION_KEY: 'testId%s' % i,
-                'data': 'foobar123'
-            })
+        for i in range(num_put_new_items):
+            table.put_item(Item={PARTITION_KEY: f'testId{i}', 'data': 'foobar123'})
         # Put items with an already existing ID (fix https://github.com/localstack/localstack/issues/522)
-        for i in range(0, num_put_existing_items):
-            table.put_item(Item={
-                PARTITION_KEY: 'testId%s' % i,
-                'data': 'foobar123_put_existing'
-            })
+        for i in range(num_put_existing_items):
+            table.put_item(
+                Item={
+                    PARTITION_KEY: f'testId{i}',
+                    'data': 'foobar123_put_existing',
+                }
+            )
 
         # batch write some items containing non-ASCII characters
         dynamodb.batch_write_item(RequestItems={table_name: [
@@ -210,24 +209,24 @@ class IntegrationTest(unittest.TestCase):
             {'PutRequest': {'Item': {PARTITION_KEY: short_uid(), 'data': 'foobar123 ¢'}}}
         ]})
         # update some items, which also triggers notification events
-        for i in range(0, num_updates_ddb):
-            dynamodb_service.update_item(TableName=table_name,
-                Key={PARTITION_KEY: {'S': 'testId%s' % i}},
-                AttributeUpdates={'data': {
-                    'Action': 'PUT',
-                    'Value': {'S': 'foobar123_updated'}
-                }})
+        for i in range(num_updates_ddb):
+            dynamodb_service.update_item(
+                TableName=table_name,
+                Key={PARTITION_KEY: {'S': f'testId{i}'}},
+                AttributeUpdates={
+                    'data': {'Action': 'PUT', 'Value': {'S': 'foobar123_updated'}}
+                },
+            )
 
         # put items to stream
         num_events_kinesis = 10
-        LOGGER.info('Putting %s items to stream...' % num_events_kinesis)
+        LOGGER.info(f'Putting {num_events_kinesis} items to stream...')
         kinesis.put_records(
             Records=[
-                {
-                    'Data': '{}',
-                    'PartitionKey': 'testId%s' % i
-                } for i in range(0, num_events_kinesis)
-            ], StreamName=TEST_LAMBDA_SOURCE_STREAM_NAME
+                {'Data': '{}', 'PartitionKey': f'testId{i}'}
+                for i in range(num_events_kinesis)
+            ],
+            StreamName=TEST_LAMBDA_SOURCE_STREAM_NAME,
         )
 
         # put 1 item to stream that will trigger an error in the Lambda
@@ -239,8 +238,8 @@ class IntegrationTest(unittest.TestCase):
         response = sns.create_topic(Name=TEST_TOPIC_NAME)
         sns.subscribe(TopicArn=response['TopicArn'], Protocol='lambda',
             Endpoint=aws_stack.lambda_function_arn(TEST_LAMBDA_NAME_STREAM))
-        for i in range(0, num_events_sns):
-            sns.publish(TopicArn=response['TopicArn'], Message='test message %s' % i)
+        for i in range(num_events_sns):
+            sns.publish(TopicArn=response['TopicArn'], Message=f'test message {i}')
 
         # get latest records
         latest = aws_stack.kinesis_get_latest_records(TEST_LAMBDA_SOURCE_STREAM_NAME,
@@ -260,8 +259,9 @@ class IntegrationTest(unittest.TestCase):
 
         def check_events():
             if len(events) != num_events:
-                LOGGER.warning(('DynamoDB and Kinesis updates retrieved (actual/expected): %s/%s') %
-                    (len(events), num_events))
+                LOGGER.warning(
+                    f'DynamoDB and Kinesis updates retrieved (actual/expected): {len(events)}/{num_events}'
+                )
             self.assertEqual(len(events), num_events)
             event_items = [json.loads(base64.b64decode(e['data'])) for e in events]
             # make sure the we have the right amount of INSERT/MODIFY event types
@@ -291,7 +291,7 @@ class IntegrationTest(unittest.TestCase):
 
     def test_lambda_streams_batch_and_transactions(self):
         ddb_lease_table_suffix = '-kclapp2'
-        table_name = TEST_TABLE_NAME + 'lsbat' + ddb_lease_table_suffix
+        table_name = f'{TEST_TABLE_NAME}lsbat{ddb_lease_table_suffix}'
         stream_name = TEST_STREAM_NAME
         dynamodb = aws_stack.connect_to_service('dynamodb', client=True)
         dynamodb_service = aws_stack.connect_to_service('dynamodb')
@@ -400,8 +400,9 @@ class IntegrationTest(unittest.TestCase):
 
         def check_events():
             if len(events) != num_events:
-                LOGGER.warning(('DynamoDB updates retrieved (actual/expected): %s/%s') %
-                    (len(events), num_events))
+                LOGGER.warning(
+                    f'DynamoDB updates retrieved (actual/expected): {len(events)}/{num_events}'
+                )
             self.assertEqual(len(events), num_events)
             event_items = [json.loads(base64.b64decode(e['data'])) for e in events]
             # make sure the we have the right amount of expected event types
@@ -456,7 +457,9 @@ class IntegrationTest(unittest.TestCase):
         # publish test record
         test_data = {'test_data': 'forward_chain_data_%s with \'quotes\\"' % short_uid()}
         data = clone(test_data)
-        data[lambda_integration.MSG_BODY_MESSAGE_TARGET] = 'kinesis:%s' % TEST_CHAIN_STREAM2_NAME
+        data[
+            lambda_integration.MSG_BODY_MESSAGE_TARGET
+        ] = f'kinesis:{TEST_CHAIN_STREAM2_NAME}'
         kinesis.put_record(Data=to_bytes(json.dumps(data)), PartitionKey='testId', StreamName=TEST_CHAIN_STREAM1_NAME)
 
         # check results

@@ -26,6 +26,8 @@ def run_parallel_download():
 
     file_length = 10000000
 
+
+
     class DownloadListener(ProxyListener):
 
         def forward_request(self, method, path, data, headers):
@@ -33,8 +35,9 @@ def run_parallel_download():
             time.sleep(sleep_time)
             response = Response()
             response.status_code = 200
-            response._content = ('%s' % sleep_time) * file_length
+            response._content = f'{sleep_time}' * file_length
             return response
+
 
     test_port = 12124
     tmp_file_pattern = '/tmp/test.%s'
@@ -45,7 +48,7 @@ def run_parallel_download():
     def do_download(param):
         tmp_file = tmp_file_pattern % param
         TMP_FILES.append(tmp_file)
-        download('http://localhost:%s/%s' % (test_port, param), tmp_file)
+        download(f'http://localhost:{test_port}/{param}', tmp_file)
 
     values = (1, 2, 3)
     parallelize(do_download, values)

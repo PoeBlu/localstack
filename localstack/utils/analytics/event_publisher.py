@@ -135,7 +135,7 @@ def poll_and_send_messages(params):
         try:
             event = EVENT_QUEUE.get(block=True, timeout=None)
             event = event.to_dict()
-            endpoint = '%s/events' % API_ENDPOINT.rstrip('/')
+            endpoint = f"{API_ENDPOINT.rstrip('/')}/events"
             requests.post(endpoint, json=event)
         except Exception:
             # silently fail, make collection of usage data as non-intrusive as possible

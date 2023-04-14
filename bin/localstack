@@ -17,6 +17,7 @@ Options:
 %s
 """
 
+
 import os
 import sys
 import glob
@@ -64,8 +65,7 @@ if __name__ == '__main__':
     for cmd in sorted(config.CLI_COMMANDS.keys()):
         cmd_details = config.CLI_COMMANDS[cmd]
         additional_commands += '\n  %s%s%s' % (cmd, (20 - len(cmd)) * ' ', cmd_details['description'])
-        for param in cmd_details.get('parameters', []):
-            additional_params.append(param)
+        additional_params.extend(iter(cmd_details.get('parameters', [])))
     additional_params = '\n'.join(additional_params)
     doc_string = __doc__ % (additional_commands, additional_params)
 
@@ -80,15 +80,14 @@ if __name__ == '__main__':
 
     # invoke subcommand
     argv = [args['<command>']] + args['<args>']
-    subcommand = config.CLI_COMMANDS.get(args['<command>'])
-    if subcommand:
+    if subcommand := config.CLI_COMMANDS.get(args['<command>']):
         try:
             subcommand['function'](argv, args)
         except Exception as e:
             if os.environ.get('DEBUG') in ['1', 'true']:
                 print(traceback.format_exc())
-            print('ERROR: %s' % e)
+            print(f'ERROR: {e}')
             sys.exit(1)
     else:
-        print('ERROR: Invalid command "%s"' % args['<command>'])
+        print(f"""ERROR: Invalid command "{args['<command>']}\"""")
         sys.exit(1)

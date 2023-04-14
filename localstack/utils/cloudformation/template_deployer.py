@@ -23,11 +23,11 @@ def str_or_none(o):
 
 
 def select_attributes(obj, attrs):
-    result = {}
-    for attr in attrs:
-        if obj.get(attr) is not None:
-            result[attr] = str_or_none(obj.get(attr))
-    return result
+    return {
+        attr: str_or_none(obj.get(attr))
+        for attr in attrs
+        if obj.get(attr) is not None
+    }
 
 
 # maps resource types to functions and parameters for creation
@@ -235,7 +235,11 @@ def convert_acl_cf_to_s3(acl):
 
 def retrieve_topic_arn(topic_name):
     topics = aws_stack.connect_to_service('sns').list_topics()['Topics']
-    topic_arns = [t['TopicArn'] for t in topics if t['TopicArn'].endswith(':%s' % topic_name)]
+    topic_arns = [
+        t['TopicArn']
+        for t in topics
+        if t['TopicArn'].endswith(f':{topic_name}')
+    ]
     return topic_arns[0]
 
 
@@ -263,9 +267,7 @@ def template_to_json(template):
 def get_resource_type(resource):
     res_type = resource.get('ResourceType') or resource.get('Type') or ''
     parts = res_type.split('::', 1)
-    if len(parts) == 1:
-        return None
-    return parts[1]
+    return None if len(parts) == 1 else parts[1]
 
 
 def get_service_name(resource):
@@ -275,10 +277,7 @@ def get_service_name(resource):
         return None
     if res_type.endswith('Cognito::UserPool'):
         return 'cognito-idp'
-    if parts[-2] == 'Cognito':
-        # TODO add mappings for "cognito-identity"
-        return 'cognito-idp'
-    return parts[1].lower()
+    return 'cognito-idp' if parts[-2] == 'Cognito' else parts[1].lower()
 
 
 def get_resource_name(resource):
@@ -296,7 +295,7 @@ def get_resource_name(resource):
     elif res_type == 'Cognito::UserPool':
         name = properties.get('PoolName')
     else:
-        LOG.warning('Unable to extract name for resource type "%s"' % res_type)
+        LOG.warning(f'Unable to extract name for resource type "{res_type}"')
 
     return name
 
@@ -306,7 +305,9 @@ def get_client(resource):
     service = get_service_name(resource)
     resource_config = RESOURCE_TO_FUNCTION.get(resource_type)
     if resource_config is None:
-        raise Exception('CloudFormation deployment for resource type %s not yet implemented' % resource_type)
+        raise Exception(
+            f'CloudFormation deployment for resource type {resource_type} not yet implemented'
+        )
     if ACTION_CREATE not in resource_config:
         # nothing to do for this resource
         return
@@ -315,7 +316,9 @@ def get_client(resource):
             return aws_stack.connect_to_resource(service)
         return aws_stack.connect_to_service(service)
     except Exception as e:
-        LOG.warning('Unable to get client for "%s" API, skipping deployment: %s' % (service, e))
+        LOG.warning(
+            f'Unable to get client for "{service}" API, skipping deployment: {e}'
+        )
         return None
 
 
@@ -400,9 +403,12 @@ def retrieve_resource_details(resource_id, resource_status, resources, stack_nam
         elif resource_type == 'SQS::Queue':
             sqs_client = aws_stack.connect_to_service('sqs')
             queues = sqs_client.list_queues()
-            result = list(filter(lambda item:
-                # TODO possibly find a better way to compare resource_id with queue URLs
-                item.endswith('/%s' % resource_id), queues.get('QueueUrls', [])))
+            result = list(
+                filter(
+                    lambda item: item.endswith(f'/{resource_id}'),
+                    queues.get('QueueUrls', []),
+                )
+            )
             if not result:
                 return None
             result = sqs_client.get_queue_attributes(QueueUrl=result[0], AttributeNames=['All'])['Attributes']
@@ -420,30 +426,31 @@ def retrieve_resource_details(resource_id, resource_status, resources, stack_nam
             raise Exception('ResourceNotFound')
         elif resource_type == 'Kinesis::Stream':
             stream_name = resolve_refs_recursively(stack_name, resource_props['Name'], resources)
-            result = aws_stack.connect_to_service('kinesis').describe_stream(StreamName=stream_name)
-            return result
+            return aws_stack.connect_to_service('kinesis').describe_stream(
+                StreamName=stream_name
+            )
         elif resource_type == 'StepFunctions::StateMachine':
             sm_name = resource_props.get('StateMachineName') or resource_id
             sm_name = resolve_refs_recursively(stack_name, sm_name, resources)
             sfn_client = aws_stack.connect_to_service('stepfunctions')
             state_machines = sfn_client.list_state_machines()['stateMachines']
             sm_arn = [m['stateMachineArn'] for m in state_machines if m['name'] == sm_name]
-            if not sm_arn:
-                return None
-            result = sfn_client.describe_state_machine(stateMachineArn=sm_arn[0])
-            return result
+            return (
+                sfn_client.describe_state_machine(stateMachineArn=sm_arn[0])
+                if sm_arn
+                else None
+            )
         elif resource_type == 'StepFunctions::Activity':
             act_name = resource_props.get('Name') or resource_id
             act_name = resolve_refs_recursively(stack_name, act_name, resources)
             sfn_client = aws_stack.connect_to_service('stepfunctions')
             activities = sfn_client.list_activities()['activities']
             result = [a['activityArn'] for a in activities if a['name'] == act_name]
-            if not result:
-                return None
-            return result[0]
+            return result[0] if result else None
         if is_deployable_resource(resource):
-            LOG.warning('Unexpected resource type %s when resolving references of resource %s: %s' %
-                        (resource_type, resource_id, resource))
+            LOG.warning(
+                f'Unexpected resource type {resource_type} when resolving references of resource {resource_id}: {resource}'
+            )
     except Exception as e:
         check_not_found_exception(e, resource_type, resource, resource_status)
     return None
@@ -453,20 +460,20 @@ def check_not_found_exception(e, resource_type, resource, resource_status):
     # we expect this to be a "not found" exception
     markers = ['NoSuchBucket', 'ResourceNotFound', '404']
     if not list(filter(lambda marker, e=e: marker in str(e), markers)):
-        LOG.warning('Unexpected error retrieving details for resource %s: %s %s - %s %s' %
-            (resource_type, e, traceback.format_exc(), resource, resource_status))
+        LOG.warning(
+            f'Unexpected error retrieving details for resource {resource_type}: {e} {traceback.format_exc()} - {resource} {resource_status}'
+        )
 
 
 def extract_resource_attribute(resource_type, resource, attribute):
-    LOG.debug('Extract resource attribute: %s %s' % (resource_type, attribute))
+    LOG.debug(f'Extract resource attribute: {resource_type} {attribute}')
     # extract resource specific attributes
     if resource_type == 'Lambda::Function':
         actual_attribute = 'FunctionArn' if attribute == 'Arn' else attribute
         return resource['Configuration'][actual_attribute]
     elif resource_type == 'DynamoDB::Table':
         actual_attribute = 'LatestStreamArn' if attribute == 'StreamArn' else attribute
-        value = resource['Table'].get(actual_attribute)
-        return value
+        return resource['Table'].get(actual_attribute)
     elif resource_type == 'ApiGateway::RestApi':
         if attribute == 'PhysicalResourceId':
             return resource['id']
@@ -500,16 +507,21 @@ def resolve_ref(stack_name, ref, resources, attribute):
     resource_type = get_resource_type(resource)
     result = extract_resource_attribute(resource_type, resource_new, attribute)
     if not result:
-        LOG.warning('Unable to extract reference attribute %s from resource: %s' % (attribute, resource_new))
+        LOG.warning(
+            f'Unable to extract reference attribute {attribute} from resource: {resource_new}'
+        )
     return result
 
 
 def resolve_refs_recursively(stack_name, value, resources):
     if isinstance(value, dict):
         if len(value) == 1 and 'Ref' in value:
-            result = resolve_ref(stack_name, value['Ref'],
-                resources, attribute='PhysicalResourceId')
-            return result
+            return resolve_ref(
+                stack_name,
+                value['Ref'],
+                resources,
+                attribute='PhysicalResourceId',
+            )
         elif len(value) == 1 and 'Fn::GetAtt' in value:
             return resolve_ref(stack_name, value['Fn::GetAtt'][0],
                 resources, attribute=value['Fn::GetAtt'][1])
@@ -526,7 +538,7 @@ def resolve_refs_recursively(stack_name, value, resources):
                 result = result.replace('${%s}' % key, val)
             return result
     if isinstance(value, list):
-        for i in range(0, len(value)):
+        for i in range(len(value)):
             value[i] = resolve_refs_recursively(stack_name, value[i], resources)
     return value
 
@@ -535,7 +547,9 @@ def update_resource(resource_id, resources, stack_name):
     resource = resources[resource_id]
     resource_type = get_resource_type(resource)
     if resource_type not in UPDATEABLE_RESOURCES:
-        LOG.warning('Unable to update resource type "%s", id "%s"' % (resource_type, resource_id))
+        LOG.warning(
+            f'Unable to update resource type "{resource_type}", id "{resource_id}"'
+        )
         return
     props = resource['Properties']
     if resource_type == 'Lambda::Function':
@@ -573,9 +587,7 @@ def convert_data_types(func_details, params):
             return _obj in ['True', 'true', True]
         if _type == str:
             return str(_obj)
-        if _type == int:
-            return int(_obj)
-        return _obj
+        return int(_obj) if _type == int else _obj
 
     def fix_types(o):
         if isinstance(o, dict):
@@ -583,6 +595,7 @@ def convert_data_types(func_details, params):
                 if k in attr_names:
                     o[k] = cast(v, types[k])
         return o
+
     result = common.recurse_object(params, fix_types)
     return result
 

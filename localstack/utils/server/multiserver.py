@@ -50,6 +50,8 @@ def start_server(port, asynchronous=False):
         LOG.debug('API Multiserver appears to be already running.')
         return
 
+
+
     class ConfigListener(ProxyListener):
         def forward_request(self, method, path, data, **kwargs):
             response = Response()
@@ -62,10 +64,11 @@ def start_server(port, asynchronous=False):
                     elif method == 'GET':
                         response._content = json.dumps(json_safe(API_SERVERS))
             except Exception as e:
-                LOG.error('Unable to process request: %s' % e)
+                LOG.error(f'Unable to process request: {e}')
                 response.status_code = 500
                 response._content = str(e)
             return response
+
 
     proxy = GenericProxy(port, update_listener=ConfigListener())
     proxy.start()
@@ -77,15 +80,16 @@ def start_server(port, asynchronous=False):
 def start_api_server(api, port, server_port=None):
     server_port = server_port or MULTI_SERVER_PORT
     thread = start_server_process(server_port)
-    url = 'http://localhost:%s%s' % (server_port, API_PATH_SERVERS)
+    url = f'http://localhost:{server_port}{API_PATH_SERVERS}'
     payload = {
         'api': api,
         'port': port
     }
     result = requests.post(url, json=payload)
     if result.status_code >= 400:
-        raise Exception('Unable to start API in multi server (%s): %s' %
-                        (result.status_code, result.content))
+        raise Exception(
+            f'Unable to start API in multi server ({result.status_code}): {result.content}'
+        )
     return thread
 
 
@@ -94,12 +98,10 @@ def start_server_process(port):
         return API_SERVERS['__server__']['thread']
     port = port or MULTI_SERVER_PORT
     API_SERVERS['__server__'] = config = {'port': port}
-    LOG.info('Starting multi API server process on port %s' % port)
+    LOG.info(f'Starting multi API server process on port {port}')
     if RUN_SERVER_IN_PROCESS:
-        cmd = '"%s" "%s" %s' % (sys.executable, __file__, port)
-        env_vars = {
-            'PYTHONPATH': '.:%s' % constants.LOCALSTACK_ROOT_FOLDER
-        }
+        cmd = f'"{sys.executable}" "{__file__}" {port}'
+        env_vars = {'PYTHONPATH': f'.:{constants.LOCALSTACK_ROOT_FOLDER}'}
         thread = ShellCommandThread(cmd, outfile=subprocess.PIPE, env_vars=env_vars,
             inherit_cwd=True)
         thread.start()

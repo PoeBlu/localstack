@@ -41,13 +41,12 @@ QUEUE_ATTRIBUTES = {}
 class ProxyListenerSQS(ProxyListener):
 
     def forward_request(self, method, path, data, headers):
-        req_data = self.parse_request_data(method, path, data)
-
-        if req_data:
+        if req_data := self.parse_request_data(method, path, data):
             action = req_data.get('Action', [None])[0]
             if action == 'SendMessage':
-                new_response = self._send_message(path, data, req_data, headers)
-                if new_response:
+                if new_response := self._send_message(
+                    path, data, req_data, headers
+                ):
                     return new_response
             elif action == 'SetQueueAttributes':
                 self._set_queue_attributes(req_data)
@@ -58,9 +57,12 @@ class ProxyListenerSQS(ProxyListener):
                 if method == 'GET':
                     base_path = path.partition('?')[0]
                     modified_url = '%s?%s' % (base_path, urlencode(req_data, doseq=True))
-                request = Request(data=encoded_data, url=modified_url, headers=headers, method=method)
-                return request
-
+                return Request(
+                    data=encoded_data,
+                    url=modified_url,
+                    headers=headers,
+                    method=method,
+                )
         return True
 
     def parse_request_data(self, method, path, data):
@@ -190,8 +192,11 @@ class ProxyListenerSQS(ProxyListener):
         for (key_name, key_id) in names:
             msg_attrs[key_name] = {}
             # Find vals for each key_id
-            attrs = [(k, data[k]) for k in data
-                if k.startswith('{}.{}.'.format(prefix, key_id)) and not k.endswith('.Name')]
+            attrs = [
+                (k, data[k])
+                for k in data
+                if k.startswith(f'{prefix}.{key_id}.') and not k.endswith('.Name')
+            ]
             for (attr_k, attr_v) in attrs:
                 attr_name = attr_k.split('.')[3]
                 msg_attrs[key_name][attr_name[0].lower() + attr_name[1:]] = attr_v[0]
@@ -212,8 +217,8 @@ class ProxyListenerSQS(ProxyListener):
     def _format_attributes(self, req_data):
         result = {}
         for i in range(1, 500):
-            key1 = 'Attribute.%s.Name' % i
-            key2 = 'Attribute.%s.Value' % i
+            key1 = f'Attribute.{i}.Name'
+            key2 = f'Attribute.{i}.Value'
             if key1 not in req_data:
                 break
             key_name = req_data[key1][0]
@@ -228,9 +233,9 @@ class ProxyListenerSQS(ProxyListener):
         message_attributes = self.format_message_attributes(req_data)
         region_name = extract_region_from_auth_header(headers)
 
-        process_result = lambda_api.process_sqs_message(message_body,
-            message_attributes, queue_name, region_name=region_name)
-        if process_result:
+        if process_result := lambda_api.process_sqs_message(
+            message_body, message_attributes, queue_name, region_name=region_name
+        ):
             # If a Lambda was listening, do not add the message to the queue
             new_response = Response()
             new_response._content = SUCCESSFUL_SEND_MESSAGE_XML_TEMPLATE.format(
@@ -256,7 +261,7 @@ class ProxyListenerSQS(ProxyListener):
         attrs = re.sub(regex, r'\2', content_str, flags=flags)
         for key, value in QUEUE_ATTRIBUTES.get(queue_url, {}).items():
             if not re.match(r'<Name>\s*%s\s*</Name>' % key, attrs, flags=flags):
-                attrs += '<Attribute><Name>%s</Name><Value>%s</Value></Attribute>' % (key, value)
+                attrs += f'<Attribute><Name>{key}</Name><Value>{value}</Value></Attribute>'
         content_str = (re.sub(regex, r'\1', content_str, flags=flags) +
             attrs + re.sub(regex, r'\3', content_str, flags=flags))
         return content_str
@@ -281,12 +286,7 @@ class ProxyListenerSQS(ProxyListener):
 # extract the external port used by the client to make the request
 def get_external_port(headers, request_handler):
     host = headers.get('Host', '')
-    if ':' in host:
-        return int(host.split(':')[1])
-    # If we cannot find the Host header, then fall back to the port of the proxy.
-    # (note that this could be incorrect, e.g., if running in Docker with a host port that
-    # is different from the internal container port, but there is not much else we can do.)
-    return request_handler.proxy.port
+    return int(host.split(':')[1]) if ':' in host else request_handler.proxy.port
 
 
 # instantiate listener

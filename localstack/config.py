@@ -53,8 +53,10 @@ LAMBDA_DOCKER_NETWORK = os.environ.get('LAMBDA_DOCKER_NETWORK', '').strip()
 # folder for temporary files and data
 TMP_FOLDER = os.path.join(tempfile.gettempdir(), 'localstack')
 # fix for Mac OS, to be able to mount /var/folders in Docker
-if TMP_FOLDER.startswith('/var/folders/') and os.path.exists('/private%s' % TMP_FOLDER):
-    TMP_FOLDER = '/private%s' % TMP_FOLDER
+if TMP_FOLDER.startswith('/var/folders/') and os.path.exists(
+    f'/private{TMP_FOLDER}'
+):
+    TMP_FOLDER = f'/private{TMP_FOLDER}'
 
 # temporary folder of the host (required when running in Docker). Fall back to local tmp folder if not set
 HOST_TMP_FOLDER = os.environ.get('HOST_TMP_FOLDER', TMP_FOLDER)
@@ -109,10 +111,7 @@ def is_linux():
 # whether to use Lambda functions in a Docker container
 LAMBDA_EXECUTOR = os.environ.get('LAMBDA_EXECUTOR', '').strip()
 if not LAMBDA_EXECUTOR:
-    LAMBDA_EXECUTOR = 'docker'
-    if not has_docker():
-        LAMBDA_EXECUTOR = 'local'
-
+    LAMBDA_EXECUTOR = 'docker' if has_docker() else 'local'
 # Fallback URL to use when a non-existing Lambda is invoked. If this matches
 # `dynamodb://<table_name>`, then the invocation is recorded in the corresponding
 # DynamoDB table. If this matches `http(s)://...`, then the Lambda invocation is
@@ -132,17 +131,21 @@ CONFIG_ENV_VARS = ['SERVICES', 'HOSTNAME', 'HOSTNAME_EXTERNAL', 'LOCALSTACK_HOST
 
 for key, value in six.iteritems(DEFAULT_SERVICE_PORTS):
     clean_key = key.upper().replace('-', '_')
-    CONFIG_ENV_VARS += [clean_key + '_BACKEND', clean_key + '_PORT', clean_key + '_PORT_EXTERNAL']
+    CONFIG_ENV_VARS += [
+        f'{clean_key}_BACKEND',
+        f'{clean_key}_PORT',
+        f'{clean_key}_PORT_EXTERNAL',
+    ]
 
 # create variable aliases prefixed with LOCALSTACK_ (except LOCALSTACK_HOSTNAME)
-CONFIG_ENV_VARS += ['LOCALSTACK_' + v for v in CONFIG_ENV_VARS]
+CONFIG_ENV_VARS += [f'LOCALSTACK_{v}' for v in CONFIG_ENV_VARS]
 
 
 def ping(host):
     """ Returns True if host responds to a ping request """
     is_windows = platform.system().lower() == 'windows'
     ping_opts = '-n 1' if is_windows else '-c 1'
-    args = 'ping %s %s' % (ping_opts, host)
+    args = f'ping {ping_opts} {host}'
     return subprocess.call(args, shell=not is_windows, stdout=subprocess.PIPE, stderr=subprocess.PIPE) == 0
 
 
@@ -201,11 +204,13 @@ for folder in [DATA_DIR, TMP_FOLDER]:
             pass
 
 # set variables no_proxy, i.e., run internal service calls directly
-no_proxy = ','.join(set((LOCALSTACK_HOSTNAME, HOSTNAME, LOCALHOST, '127.0.0.1', '[::1]')))
+no_proxy = ','.join(
+    {LOCALSTACK_HOSTNAME, HOSTNAME, LOCALHOST, '127.0.0.1', '[::1]'}
+)
 if os.environ.get('no_proxy'):
-    os.environ['no_proxy'] += ',' + no_proxy
+    os.environ['no_proxy'] += f',{no_proxy}'
 elif os.environ.get('NO_PROXY'):
-    os.environ['NO_PROXY'] += ',' + no_proxy
+    os.environ['NO_PROXY'] += f',{no_proxy}'
 else:
     os.environ['no_proxy'] = no_proxy
 
@@ -227,7 +232,7 @@ def parse_service_ports():
         parts = re.split(r'[:=]', service_port)
         service = parts[0]
         key_upper = service.upper().replace('-', '_')
-        port_env_name = '%s_PORT' % key_upper
+        port_env_name = f'{key_upper}_PORT'
         # (1) set default port number
         port_number = DEFAULT_SERVICE_PORTS.get(service)
         # (2) set port number from <SERVICE>_PORT environment, if present
@@ -256,12 +261,12 @@ def populate_configs(service_ports=None):
         key_upper = key.upper().replace('-', '_')
 
         # define PORT_* variables with actual service ports as per configuration
-        port_var_name = 'PORT_%s' % key_upper
+        port_var_name = f'PORT_{key_upper}'
         port_number = SERVICE_PORTS.get(key, 0)
         globs[port_var_name] = port_number
-        url = 'http%s://%s:%s' % ('s' if USE_SSL else '', LOCALSTACK_HOSTNAME, port_number)
+        url = f"http{'s' if USE_SSL else ''}://{LOCALSTACK_HOSTNAME}:{port_number}"
         # define TEST_*_URL variables with mock service endpoints
-        url_key = 'TEST_%s_URL' % key_upper
+        url_key = f'TEST_{key_upper}_URL'
         globs[url_key] = url
         # expose HOST_*_URL variables as environment variables
         os.environ[url_key] = url

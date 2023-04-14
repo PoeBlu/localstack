@@ -9,11 +9,11 @@ from localstack.services.generic_proxy import ProxyListener
 
 # action headers
 ACTION_PREFIX = 'Kinesis_20131202'
-ACTION_PUT_RECORD = '%s.PutRecord' % ACTION_PREFIX
-ACTION_PUT_RECORDS = '%s.PutRecords' % ACTION_PREFIX
-ACTION_CREATE_STREAM = '%s.CreateStream' % ACTION_PREFIX
-ACTION_DELETE_STREAM = '%s.DeleteStream' % ACTION_PREFIX
-ACTION_UPDATE_SHARD_COUNT = '%s.UpdateShardCount' % ACTION_PREFIX
+ACTION_PUT_RECORD = f'{ACTION_PREFIX}.PutRecord'
+ACTION_PUT_RECORDS = f'{ACTION_PREFIX}.PutRecords'
+ACTION_CREATE_STREAM = f'{ACTION_PREFIX}.CreateStream'
+ACTION_DELETE_STREAM = f'{ACTION_PREFIX}.DeleteStream'
+ACTION_UPDATE_SHARD_COUNT = f'{ACTION_PREFIX}.UpdateShardCount'
 
 
 class ProxyListenerKinesis(ProxyListener):
@@ -22,10 +22,9 @@ class ProxyListenerKinesis(ProxyListener):
         data = json.loads(to_str(data))
         action = headers.get('X-Amz-Target')
 
-        if action == '%s.DescribeStreamSummary' % ACTION_PREFIX:
+        if action == f'{ACTION_PREFIX}.DescribeStreamSummary':
             stream_arn = data.get('StreamARN') or data['StreamName']
-            # TODO fix values below
-            result = {
+            return {
                 'StreamDescriptionSummary': {
                     'ConsumerCount': 0,
                     'EnhancedMonitoring': [],
@@ -35,24 +34,21 @@ class ProxyListenerKinesis(ProxyListener):
                     'StreamARN': stream_arn,
                     # 'StreamCreationTimestamp': number,
                     'StreamName': data['StreamName'],
-                    'StreamStatus': 'ACTIVE'
+                    'StreamStatus': 'ACTIVE',
                 }
             }
-            return result
-        if action == '%s.DescribeStreamConsumer' % ACTION_PREFIX:
+        if action == f'{ACTION_PREFIX}.DescribeStreamConsumer':
             consumer_arn = data.get('ConsumerARN') or data['ConsumerName']
             consumer_name = data.get('ConsumerName') or data['ConsumerARN']
-            result = {
+            return {
                 'ConsumerDescription': {
                     'ConsumerARN': consumer_arn,
                     # 'ConsumerCreationTimestamp': number,
                     'ConsumerName': consumer_name,
                     'ConsumerStatus': 'ACTIVE',
-                    'StreamARN': data.get('StreamARN')
+                    'StreamARN': data.get('StreamARN'),
                 }
             }
-            return result
-
         if random.random() < config.KINESIS_ERROR_PROBABILITY:
             action = headers.get('X-Amz-Target')
             if action in [ACTION_PUT_RECORD, ACTION_PUT_RECORDS]:
@@ -87,7 +83,7 @@ class ProxyListenerKinesis(ProxyListener):
             if 'Records' in response_body:
                 response_records = response_body['Records']
                 records = data['Records']
-                for index in range(0, len(records)):
+                for index in range(len(records)):
                     record = records[index]
                     event_record = {
                         'data': record['Data'],
@@ -136,7 +132,7 @@ def kinesis_error_response(data, action):
     else:
         error_response.status_code = 200
         content = {'FailedRecordCount': 1, 'Records': []}
-        for record in data.get('Records', []):
+        for _ in data.get('Records', []):
             content['Records'].append({
                 'ErrorCode': 'ProvisionedThroughputExceededException',
                 'ErrorMessage': 'Rate exceeded for shard X in stream Y under account Z.'

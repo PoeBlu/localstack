@@ -87,26 +87,24 @@ class ProxyListenerSNS(ProxyListener):
                     content = '<Tags>'
                     for tag in tags:
                         content += '<member>'
-                        content += '<Key>%s</Key>' % tag['Key']
-                        content += '<Value>%s</Value>' % tag['Value']
+                        content += f"<Key>{tag['Key']}</Key>"
+                        content += f"<Value>{tag['Value']}</Value>"
                         content += '</member>'
                     content += '</Tags>'
                 return make_response(req_action, content=content)
             elif req_action == 'TagResource':
                 tags = []
                 req_tags = {k: v for k, v in req_data.items() if k.startswith('Tags.member.')}
-                for i in range(int(len(req_tags.keys()) / 2)):
-                    key = req_tags['Tags.member.' + str(i + 1) + '.Key'][0]
-                    value = req_tags['Tags.member.' + str(i + 1) + '.Value'][0]
+                for i in range(len(req_tags.keys()) // 2):
+                    key = req_tags[f'Tags.member.{str(i + 1)}.Key'][0]
+                    value = req_tags[f'Tags.member.{str(i + 1)}.Value'][0]
                     tags.append({'Key': key, 'Value': value})
                 do_tag_resource(topic_arn, tags)
                 return make_response(req_action)
             elif req_action == 'UntagResource':
-                tags_to_remove = []
                 req_tags = {k: v for k, v in req_data.items() if k.startswith('TagKeys.member.')}
                 req_tags = req_tags.values()
-                for tag in req_tags:
-                    tags_to_remove.append(tag[0])
+                tags_to_remove = [tag[0] for tag in req_tags]
                 do_untag_resource(topic_arn, tags_to_remove)
                 return make_response(req_action)
 
@@ -124,38 +122,39 @@ class ProxyListenerSNS(ProxyListener):
 
     def return_response(self, method, path, data, headers, response):
 
-        if method == 'POST' and path == '/':
-            # convert account IDs in ARNs
-            data = aws_stack.fix_account_id_in_arns(data, colon_delimiter='%3A')
-            aws_stack.fix_account_id_in_arns(response)
+        if method != 'POST' or path != '/':
+            return
+        # convert account IDs in ARNs
+        data = aws_stack.fix_account_id_in_arns(data, colon_delimiter='%3A')
+        aws_stack.fix_account_id_in_arns(response)
 
-            # parse request and extract data
-            req_data = urlparse.parse_qs(to_str(data))
-            req_action = req_data['Action'][0]
-            if req_action == 'Subscribe' and response.status_code < 400:
-                response_data = xmltodict.parse(response.content)
-                topic_arn = (req_data.get('TargetArn') or req_data.get('TopicArn'))[0]
-                attributes = get_subscribe_attributes(req_data)
-                sub_arn = response_data['SubscribeResponse']['SubscribeResult']['SubscriptionArn']
-                do_subscribe(
-                    topic_arn,
-                    req_data['Endpoint'][0],
-                    req_data['Protocol'][0],
-                    sub_arn,
-                    attributes
-                )
-            if req_action == 'CreateTopic' and response.status_code < 400:
-                response_data = xmltodict.parse(response.content)
-                topic_arn = response_data['CreateTopicResponse']['CreateTopicResult']['TopicArn']
-                do_create_topic(topic_arn)
-                # publish event
-                event_publisher.fire_event(event_publisher.EVENT_SNS_CREATE_TOPIC,
-                    payload={'t': event_publisher.get_hash(topic_arn)})
-            if req_action == 'DeleteTopic' and response.status_code < 400:
-                # publish event
-                topic_arn = (req_data.get('TargetArn') or req_data.get('TopicArn'))[0]
-                event_publisher.fire_event(event_publisher.EVENT_SNS_DELETE_TOPIC,
-                    payload={'t': event_publisher.get_hash(topic_arn)})
+        # parse request and extract data
+        req_data = urlparse.parse_qs(to_str(data))
+        req_action = req_data['Action'][0]
+        if req_action == 'Subscribe' and response.status_code < 400:
+            response_data = xmltodict.parse(response.content)
+            topic_arn = (req_data.get('TargetArn') or req_data.get('TopicArn'))[0]
+            attributes = get_subscribe_attributes(req_data)
+            sub_arn = response_data['SubscribeResponse']['SubscribeResult']['SubscriptionArn']
+            do_subscribe(
+                topic_arn,
+                req_data['Endpoint'][0],
+                req_data['Protocol'][0],
+                sub_arn,
+                attributes
+            )
+        if req_action == 'CreateTopic' and response.status_code < 400:
+            response_data = xmltodict.parse(response.content)
+            topic_arn = response_data['CreateTopicResponse']['CreateTopicResult']['TopicArn']
+            do_create_topic(topic_arn)
+            # publish event
+            event_publisher.fire_event(event_publisher.EVENT_SNS_CREATE_TOPIC,
+                payload={'t': event_publisher.get_hash(topic_arn)})
+        if req_action == 'DeleteTopic' and response.status_code < 400:
+            # publish event
+            topic_arn = (req_data.get('TargetArn') or req_data.get('TopicArn'))[0]
+            event_publisher.fire_event(event_publisher.EVENT_SNS_DELETE_TOPIC,
+                payload={'t': event_publisher.get_hash(topic_arn)})
 
 
 # instantiate listener
@@ -211,7 +210,9 @@ def publish_message(topic_arn, req_data):
                 data=message_body
             )
         else:
-            LOGGER.warning('Unexpected protocol "%s" for SNS subscription' % subscriber['Protocol'])
+            LOGGER.warning(
+                f"""Unexpected protocol "{subscriber['Protocol']}" for SNS subscription"""
+            )
 
 
 def do_create_topic(topic_arn):
@@ -231,7 +232,7 @@ def do_subscribe(topic_arn, endpoint, protocol, subscription_arn, attributes):
         'Protocol': protocol,
         'SubscriptionArn': subscription_arn,
     }
-    subscription.update(attributes)
+    subscription |= attributes
     SNS_SUBSCRIPTIONS[topic_arn].append(subscription)
 
 
@@ -280,7 +281,7 @@ def get_subscription_by_arn(sub_arn):
 def make_response(op_name, content=''):
     response = Response()
     if not content:
-        content = '<MessageId>%s</MessageId>' % short_uid()
+        content = f'<MessageId>{short_uid()}</MessageId>'
     response._content = """<{op_name}Response xmlns="http://sns.amazonaws.com/doc/2010-03-31/">
         <{op_name}Result>
             {content}
@@ -323,18 +324,14 @@ def create_sns_message_body(subscriber, req_data):
         except KeyError:
             raise Exception("Unable to find 'default' key in message payload")
 
-    data = {}
-    data['MessageId'] = str(uuid.uuid4())
-    data['Type'] = 'Notification'
+    data = {'MessageId': str(uuid.uuid4()), 'Type': 'Notification'}
     data['Message'] = message
     data['TopicArn'] = subscriber['TopicArn']
     if subject is not None:
         data['Subject'] = subject
-    attributes = get_message_attributes(req_data)
-    if attributes:
+    if attributes := get_message_attributes(req_data):
         data['MessageAttributes'] = attributes
-    result = json.dumps(data)
-    return result
+    return json.dumps(data)
 
 
 def create_sqs_message_attributes(subscriber, attributes):
@@ -343,8 +340,7 @@ def create_sqs_message_attributes(subscriber, attributes):
 
     message_attributes = {}
     for key, value in attributes.items():
-        attribute = {}
-        attribute['DataType'] = value['Type']
+        attribute = {'DataType': value['Type']}
         if value['Type'] == 'Binary':
             attribute['BinaryValue'] = value['Value']
         else:
@@ -358,12 +354,19 @@ def get_message_attributes(req_data):
     attributes = {}
     x = 1
     while True:
-        name = req_data.get('MessageAttributes.entry.' + str(x) + '.Name', [None])[0]
+        name = req_data.get(f'MessageAttributes.entry.{str(x)}.Name', [None])[0]
         if name is not None:
-            attribute = {}
-            attribute['Type'] = req_data.get('MessageAttributes.entry.' + str(x) + '.Value.DataType', [None])[0]
-            string_value = req_data.get('MessageAttributes.entry.' + str(x) + '.Value.StringValue', [None])[0]
-            binary_value = req_data.get('MessageAttributes.entry.' + str(x) + '.Value.BinaryValue', [None])[0]
+            attribute = {
+                'Type': req_data.get(
+                    f'MessageAttributes.entry.{str(x)}.Value.DataType', [None]
+                )[0]
+            }
+            string_value = req_data.get(
+                f'MessageAttributes.entry.{str(x)}.Value.StringValue', [None]
+            )[0]
+            binary_value = req_data.get(
+                f'MessageAttributes.entry.{str(x)}.Value.BinaryValue', [None]
+            )[0]
             if string_value is not None:
                 attribute['Value'] = string_value
             elif binary_value is not None:
@@ -378,11 +381,11 @@ def get_message_attributes(req_data):
 
 
 def get_subscribe_attributes(req_data):
-    attributes = {}
-    for key in req_data.keys():
-        if '.key' in key:
-            attributes[req_data[key][0]] = req_data[key.replace('key', 'value')][0]
-    return attributes
+    return {
+        req_data[key][0]: req_data[key.replace('key', 'value')][0]
+        for key in req_data.keys()
+        if '.key' in key
+    }
 
 
 def is_number(x):
@@ -401,22 +404,29 @@ def evaluate_numeric_condition(conditions, value):
         operator = conditions[i]
         operand = conditions[i + 1]
 
-        if operator == '=':
-            if value != operand:
-                return False
-        elif operator == '>':
-            if value <= operand:
-                return False
-        elif operator == '<':
-            if value >= operand:
-                return False
-        elif operator == '>=':
-            if value < operand:
-                return False
-        elif operator == '<=':
-            if value > operand:
-                return False
-
+        if (
+            operator == '<'
+            and value >= operand
+            or operator != '<'
+            and operator == '<='
+            and value > operand
+            or operator != '<'
+            and operator != '<='
+            and operator == '='
+            and value != operand
+            or operator != '<'
+            and operator != '<='
+            and operator != '='
+            and operator == '>'
+            and value <= operand
+            or operator != '<'
+            and operator != '<='
+            and operator != '='
+            and operator != '>'
+            and operator == '>='
+            and value < operand
+        ):
+            return False
     return True
 
 

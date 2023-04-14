@@ -55,10 +55,10 @@ def publish_lambda_result(time_before, result, kwargs):
 
 
 def _func_name(kwargs):
-    func_name = kwargs.get('func_name')
-    if not func_name:
-        func_name = kwargs.get('func_arn').split(':function:')[1].split(':')[0]
-    return func_name
+    return (
+        kwargs.get('func_name')
+        or kwargs.get('func_arn').split(':function:')[1].split(':')[0]
+    )
 
 
 def publish_event(time_before, result, kwargs):

@@ -44,8 +44,7 @@ def forward_events(records):
             record['dynamodb']['SequenceNumber'] = str(SEQUENCE_NUMBER_COUNTER)
             SEQUENCE_NUMBER_COUNTER += 1
         table_arn = record['eventSourceARN']
-        stream = DDB_STREAMS.get(table_arn)
-        if stream:
+        if stream := DDB_STREAMS.get(table_arn):
             table_name = table_name_from_stream_arn(stream['StreamArn'])
             stream_name = get_kinesis_stream_name(table_name)
             kinesis.put_record(StreamName=stream_name, Data=json.dumps(record), PartitionKey='TODO')
@@ -57,12 +56,12 @@ def post_request():
     data = json.loads(to_str(request.data))
     result = {}
     kinesis = aws_stack.connect_to_service('kinesis')
-    if action == '%s.ListStreams' % ACTION_HEADER_PREFIX:
+    if action == f'{ACTION_HEADER_PREFIX}.ListStreams':
         result = {
             'Streams': list(DDB_STREAMS.values()),
             'LastEvaluatedStreamArn': 'TODO'
         }
-    elif action == '%s.DescribeStream' % ACTION_HEADER_PREFIX:
+    elif action == f'{ACTION_HEADER_PREFIX}.DescribeStream':
         for stream in DDB_STREAMS.values():
             if stream['StreamArn'] == data['StreamArn']:
                 result = {
@@ -85,19 +84,19 @@ def post_request():
                 break
         if not result:
             return error_response('Requested resource not found', error_type='ResourceNotFoundException')
-    elif action == '%s.GetShardIterator' % ACTION_HEADER_PREFIX:
+    elif action == f'{ACTION_HEADER_PREFIX}.GetShardIterator':
         # forward request to Kinesis API
         stream_name = stream_name_from_stream_arn(data['StreamArn'])
         stream_shard_id = kinesis_shard_id(data['ShardId'])
         result = kinesis.get_shard_iterator(StreamName=stream_name,
             ShardId=stream_shard_id, ShardIteratorType=data['ShardIteratorType'])
-    elif action == '%s.GetRecords' % ACTION_HEADER_PREFIX:
+    elif action == f'{ACTION_HEADER_PREFIX}.GetRecords':
         kinesis_records = kinesis.get_records(**data)
         result = {'Records': [], 'NextShardIterator': kinesis_records.get('NextShardIterator')}
         for record in kinesis_records['Records']:
             result['Records'].append(json.loads(to_str(record['Data'])))
     else:
-        print('WARNING: Unknown operation "%s"' % action)
+        print(f'WARNING: Unknown operation "{action}"')
     return jsonify(result)
 
 
@@ -111,7 +110,7 @@ def error_response(message=None, error_type=None, code=400):
     if not error_type:
         error_type = 'UnknownError'
     if 'com.amazonaws.dynamodb' not in error_type:
-        error_type = 'com.amazonaws.dynamodb.v20120810#%s' % error_type
+        error_type = f'com.amazonaws.dynamodb.v20120810#{error_type}'
     content = {
         'message': message,
         '__type': error_type

@@ -23,7 +23,7 @@ from localstack.utils.common import FuncThread, generate_ssl_cert, to_bytes
 QUIET = False
 
 # path for test certificate
-SERVER_CERT_PEM_FILE = '%s/server.test.pem' % (TMP_FOLDER)
+SERVER_CERT_PEM_FILE = f'{TMP_FOLDER}/server.test.pem'
 
 
 CORS_ALLOWED_HEADERS = ('authorization', 'content-type', 'content-md5', 'cache-control',
@@ -101,7 +101,7 @@ class GenericProxyHandler(BaseHTTPRequestHandler):
         try:
             BaseHTTPRequestHandler.__init__(self, request, client_address, server)
         except SSLError as e:
-            LOG.warning('SSL error when handling request: %s' % e)
+            LOG.warning(f'SSL error when handling request: {e}')
 
     def parse_request(self):
         result = BaseHTTPRequestHandler.parse_request(self)
@@ -112,13 +112,14 @@ class GenericProxyHandler(BaseHTTPRequestHandler):
         # Required fix for Python 2 (otherwise S3 uploads are hanging), based on the Python 3 code:
         # https://sourcecodebrowser.com/python3.2/3.2.3/http_2server_8py_source.html#l00332
         expect = self.headers.get('Expect', '')
-        if (expect.lower() == '100-continue' and
-                self.protocol_version >= 'HTTP/1.1' and
-                self.request_version >= 'HTTP/1.1'):
-            if self.request_version != 'HTTP/0.9':
-                self.wfile.write(('%s %d %s\r\n' %
-                    (self.protocol_version, 100, 'Continue')).encode('latin1', 'strict'))
-                self.end_headers()
+        if (
+            expect.lower() == '100-continue'
+            and self.protocol_version >= 'HTTP/1.1'
+            and self.request_version >= 'HTTP/1.1'
+        ) and self.request_version != 'HTTP/0.9':
+            self.wfile.write(('%s %d %s\r\n' %
+                (self.protocol_version, 100, 'Continue')).encode('latin1', 'strict'))
+            self.end_headers()
         return result
 
     def do_GET(self):
@@ -157,8 +158,7 @@ class GenericProxyHandler(BaseHTTPRequestHandler):
         self.forward('OPTIONS')
 
     def read_content(self):
-        content_length = self.headers.get('Content-Length')
-        if content_length:
+        if content_length := self.headers.get('Content-Length'):
             self.data_bytes = self.rfile.read(int(content_length))
             return
 
@@ -211,10 +211,10 @@ class GenericProxyHandler(BaseHTTPRequestHandler):
             if listener:
                 forward_url = listener.get_forward_url(method, path, data, forward_headers) or forward_url
 
-        proxy_url = '%s%s' % (forward_url, path)
+        proxy_url = f'{forward_url}{path}'
         target_url = self.path
         if '://' not in target_url:
-            target_url = '%s%s' % (forward_url, target_url)
+            target_url = f'{forward_url}{target_url}'
 
         # update original "Host" header (moto s3 relies on this behavior)
         if not forward_headers.get('Host'):
@@ -259,7 +259,7 @@ class GenericProxyHandler(BaseHTTPRequestHandler):
                 request_url = proxy_url
                 if modified_request:
                     if modified_request.url:
-                        request_url = '%s%s' % (forward_url, modified_request.url)
+                        request_url = f'{forward_url}{modified_request.url}'
                     data_to_send = modified_request.data
 
                 response = self.method(request_url, data=data_to_send,
@@ -295,7 +295,10 @@ class GenericProxyHandler(BaseHTTPRequestHandler):
                     self.send_header(header_key, header_value)
                     content_length_sent = content_length_sent or header_key.lower() == 'content-length'
             if not content_length_sent:
-                self.send_header('Content-Length', '%s' % len(response.content) if response.content else 0)
+                self.send_header(
+                    'Content-Length',
+                    f'{len(response.content)}' if response.content else 0,
+                )
 
             # allow pre-flight CORS headers by default
             if 'Access-Control-Allow-Origin' not in response.headers:
@@ -315,7 +318,7 @@ class GenericProxyHandler(BaseHTTPRequestHandler):
             conn_errors = ('ConnectionRefusedError', 'NewConnectionError',
                            'Connection aborted', 'Unexpected EOF', 'Connection reset by peer')
             conn_error = any(e in trace for e in conn_errors)
-            error_msg = 'Error forwarding request: %s %s' % (e, trace)
+            error_msg = f'Error forwarding request: {e} {trace}'
             if 'Broken pipe' in trace:
                 LOG.warn('Connection prematurely closed by client (broken pipe).')
             elif not self.proxy.quiet or not conn_error:
@@ -324,7 +327,7 @@ class GenericProxyHandler(BaseHTTPRequestHandler):
                     # During a test run, we also want to print error messages, because
                     # log messages are delayed until the entire test run is over, and
                     # hence we are missing messages if the test hangs for some reason.
-                    print('ERROR: %s' % error_msg)
+                    print(f'ERROR: {error_msg}')
             self.send_response(502)  # bad gateway
             self.end_headers()
             # force close connection
@@ -333,7 +336,7 @@ class GenericProxyHandler(BaseHTTPRequestHandler):
             try:
                 self.wfile.flush()
             except Exception as e:
-                LOG.warning('Unable to flush write file: %s' % e)
+                LOG.warning(f'Unable to flush write file: {e}')
 
     def _listeners(self):
         return self.DEFAULT_LISTENERS + [self.proxy.update_listener]
@@ -351,7 +354,7 @@ class GenericProxy(FuncThread):
         self.quiet = quiet
         if forward_url:
             if '://' not in forward_url:
-                forward_url = 'http://%s' % forward_url
+                forward_url = f'http://{forward_url}'
             forward_url = forward_url.rstrip('/')
         self.forward_url = forward_url
         self.update_listener = update_listener
@@ -372,7 +375,9 @@ class GenericProxy(FuncThread):
             self.httpd.serve_forever()
         except Exception as e:
             if not self.quiet or not self.server_stopped:
-                LOG.error('Exception running proxy on port %s: %s %s' % (self.port, e, traceback.format_exc()))
+                LOG.error(
+                    f'Exception running proxy on port {self.port}: {e} {traceback.format_exc()}'
+                )
 
     def stop(self, quiet=False):
         self.quiet = quiet

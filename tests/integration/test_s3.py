@@ -69,8 +69,11 @@ class S3ListenerTest (unittest.TestCase):
 
         # put an object where the bucket_name is in the host
         # it doesn't care about the authorization header as long as it's present
-        headers = {'Host': '{}.s3.amazonaws.com'.format(TEST_BUCKET_WITH_NOTIFICATION), 'authorization': 'some_token'}
-        url = '{}/{}'.format(os.getenv('TEST_S3_URL'), key_by_host)
+        headers = {
+            'Host': f'{TEST_BUCKET_WITH_NOTIFICATION}.s3.amazonaws.com',
+            'authorization': 'some_token',
+        }
+        url = f"{os.getenv('TEST_S3_URL')}/{key_by_host}"
         # verify=False must be set as this test fails on travis because of an SSL error non-existent locally
         response = requests.put(url, data='something else', headers=headers, verify=False)
         self.assertTrue(response.ok)
@@ -95,11 +98,10 @@ class S3ListenerTest (unittest.TestCase):
 
     def generate_large_file(self, size):
         # https://stackoverflow.com/questions/8816059/create-file-of-particular-size-in-python
-        filename = 'large_file_%s' % uuid.uuid4()
-        f = open(filename, 'wb')
-        f.seek(size - 1)
-        f.write(b'\0')
-        f.close()
+        filename = f'large_file_{uuid.uuid4()}'
+        with open(filename, 'wb') as f:
+            f.seek(size - 1)
+            f.write(b'\0')
         return open(filename, 'r')
 
     def test_s3_upload_fileobj_with_large_file_notification(self):
@@ -180,7 +182,7 @@ class S3ListenerTest (unittest.TestCase):
         # 'binary/octet-stream' should be used
         # src: https://docs.aws.amazon.com/AmazonS3/latest/API/RESTObjectPUT.html
 
-        bucket_name = 'test-bucket-%s' % short_uid()
+        bucket_name = f'test-bucket-{short_uid()}'
         self.s3_client.create_bucket(Bucket=bucket_name)
 
         # put object
@@ -197,7 +199,7 @@ class S3ListenerTest (unittest.TestCase):
         self._delete_bucket(bucket_name, [object_key])
 
     def test_s3_get_response_content_type_same_as_upload(self):
-        bucket_name = 'test-bucket-%s' % short_uid()
+        bucket_name = f'test-bucket-{short_uid()}'
         self.s3_client.create_bucket(Bucket=bucket_name)
 
         # put object
@@ -217,7 +219,7 @@ class S3ListenerTest (unittest.TestCase):
         self._delete_bucket(bucket_name, [object_key])
 
     def test_s3_head_response_content_length_same_as_upload(self):
-        bucket_name = 'test-bucket-%s' % short_uid()
+        bucket_name = f'test-bucket-{short_uid()}'
         self.s3_client.create_bucket(Bucket=bucket_name)
         body = 'something body'
         # put object
@@ -233,7 +235,7 @@ class S3ListenerTest (unittest.TestCase):
         self._delete_bucket(bucket_name, [object_key])
 
     def test_s3_put_object_on_presigned_url(self):
-        bucket_name = 'test-bucket-%s' % short_uid()
+        bucket_name = f'test-bucket-{short_uid()}'
         self.s3_client.create_bucket(Bucket=bucket_name)
         body = 'something body'
         # get presigned URL
@@ -252,7 +254,7 @@ class S3ListenerTest (unittest.TestCase):
         self._delete_bucket(bucket_name, [object_key])
 
     def test_s3_delete_response_content_length_zero(self):
-        bucket_name = 'test-bucket-%s' % short_uid()
+        bucket_name = f'test-bucket-{short_uid()}'
         self.s3_client.create_bucket(Bucket=bucket_name)
 
         # put object
@@ -293,7 +295,7 @@ class S3ListenerTest (unittest.TestCase):
         s3_client.delete_bucket(Bucket=bucket)
 
     def test_s3_get_response_headers(self):
-        bucket_name = 'test-bucket-%s' % short_uid()
+        bucket_name = f'test-bucket-{short_uid()}'
         self.s3_client.create_bucket(Bucket=bucket_name)
 
         # put object and CORS configuration
@@ -321,7 +323,7 @@ class S3ListenerTest (unittest.TestCase):
         self._delete_bucket(bucket_name, [object_key])
 
     def test_s3_copy_md5(self):
-        bucket_name = 'test-bucket-%s' % short_uid()
+        bucket_name = f'test-bucket-{short_uid()}'
         self.s3_client.create_bucket(Bucket=bucket_name)
 
         # put object
@@ -348,7 +350,7 @@ class S3ListenerTest (unittest.TestCase):
         self._delete_bucket(bucket_name, [src_key, dest_key, dest_key2])
 
     def test_s3_invalid_content_md5(self):
-        bucket_name = 'test-bucket-%s' % short_uid()
+        bucket_name = f'test-bucket-{short_uid()}'
         self.s3_client.create_bucket(Bucket=bucket_name)
 
         # put object with invalid content MD5
@@ -360,13 +362,13 @@ class S3ListenerTest (unittest.TestCase):
             except Exception:
                 raised = True
             if not raised:
-                raise Exception('Invalid MD5 hash "%s" should have raised an error' % hash)
+                raise Exception(f'Invalid MD5 hash "{hash}" should have raised an error')
 
         # Cleanup
         self.s3_client.delete_bucket(Bucket=bucket_name)
 
     def test_s3_upload_download_gzip(self):
-        bucket_name = 'test-bucket-%s' % short_uid()
+        bucket_name = f'test-bucket-{short_uid()}'
         self.s3_client.create_bucket(Bucket=bucket_name)
 
         data = '000000000000000000000000000000'
@@ -386,10 +388,10 @@ class S3ListenerTest (unittest.TestCase):
         with gzip.GzipFile(fileobj=download_file_object, mode='rb') as filestream:
             downloaded_data = filestream.read().decode('utf-8')
 
-        self.assertEqual(downloaded_data, data, '{} != {}'.format(downloaded_data, data))
+        self.assertEqual(downloaded_data, data, f'{downloaded_data} != {data}')
 
     def test_set_external_hostname(self):
-        bucket_name = 'test-bucket-%s' % short_uid()
+        bucket_name = f'test-bucket-{short_uid()}'
         key = 'test.file'
         hostname_before = config.HOSTNAME_EXTERNAL
         config.HOSTNAME_EXTERNAL = 'foobar'
@@ -399,8 +401,7 @@ class S3ListenerTest (unittest.TestCase):
             self.s3_client.create_bucket(Bucket=bucket_name)
             # upload file
             response = self._perform_multipart_upload(bucket=bucket_name, key=key, data=content, acl=acl)
-            expected_url = '%s://%s:%s/%s/%s' % (get_service_protocol(), config.HOSTNAME_EXTERNAL,
-                config.PORT_S3, bucket_name, key)
+            expected_url = f'{get_service_protocol()}://{config.HOSTNAME_EXTERNAL}:{config.PORT_S3}/{bucket_name}/{key}'
             self.assertEqual(expected_url, response['Location'])
             # fix object ACL - currently not directly support for multipart uploads
             self.s3_client.put_object_acl(Bucket=bucket_name, Key=key, ACL=acl)
@@ -408,7 +409,9 @@ class S3ListenerTest (unittest.TestCase):
             downloaded_object = self.s3_client.get_object(Bucket=bucket_name, Key=key)
             self.assertEqual(to_str(downloaded_object['Body'].read()), content)
             # download object directly from download link
-            download_url = response['Location'].replace('%s:' % config.HOSTNAME_EXTERNAL, 'localhost:')
+            download_url = response['Location'].replace(
+                f'{config.HOSTNAME_EXTERNAL}:', 'localhost:'
+            )
             response = safe_requests.get(download_url)
             self.assertEqual(response.status_code, 200)
             self.assertEqual(to_str(response.content), content)

@@ -30,7 +30,7 @@ class EventFileReaderThread(FuncThread):
                 thread = FuncThread(self.handle_connection, conn)
                 thread.start()
             except Exception as e:
-                LOGGER.error('Error dispatching client request: %s %s' % (e, traceback.format_exc()))
+                LOGGER.error(f'Error dispatching client request: {e} {traceback.format_exc()}')
         sock.close()
 
     def handle_connection(self, conn):
@@ -53,8 +53,9 @@ class EventFileReaderThread(FuncThread):
                 else:
                     self.callback(records)
             except Exception as e:
-                LOGGER.warning("Unable to process JSON line: '%s': %s %s. Callback: %s" %
-                               (truncate(line), e, traceback.format_exc(), self.callback))
+                LOGGER.warning(
+                    f"Unable to process JSON line: '{truncate(line)}': {e} {traceback.format_exc()}. Callback: {self.callback}"
+                )
         conn.close()
 
     def stop(self, quiet=True):

@@ -42,15 +42,21 @@ def get_domain_config(domain_name):
     return {
         'DomainConfig': {
             'AccessPolicies': {
-                'Options': '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"AWS":"arn:aws:iam::%s:root"},"Action":"es:*","Resource":"arn:aws:es:%s:%s:domain/%s/*"}]}' % (TEST_AWS_ACCOUNT_ID, DEFAULT_REGION, TEST_AWS_ACCOUNT_ID, domain_name),  # noqa: E501
-                'Status': config_status
+                'Options': '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"AWS":"arn:aws:iam::%s:root"},"Action":"es:*","Resource":"arn:aws:es:%s:%s:domain/%s/*"}]}'
+                % (
+                    TEST_AWS_ACCOUNT_ID,
+                    DEFAULT_REGION,
+                    TEST_AWS_ACCOUNT_ID,
+                    domain_name,
+                ),  # noqa: E501
+                'Status': config_status,
             },
             'AdvancedOptions': {
                 'Options': {
                     'indices.fielddata.cache.size': '',
-                    'rest.action.multi.allow_explicit_index': 'true'
+                    'rest.action.multi.allow_explicit_index': 'true',
                 },
-                'Status': config_status
+                'Status': config_status,
             },
             'EBSOptions': {
                 'Options': {
@@ -58,9 +64,9 @@ def get_domain_config(domain_name):
                     'EncryptionEnabled': False,
                     'Iops': 0,
                     'VolumeSize': 10,
-                    'VolumeType': 'gp2'
+                    'VolumeType': 'gp2',
                 },
-                'Status': config_status
+                'Status': config_status,
             },
             'ElasticsearchClusterConfig': {
                 'Options': {
@@ -69,55 +75,44 @@ def get_domain_config(domain_name):
                     'DedicatedMasterType': 'm3.medium.elasticsearch',
                     'InstanceCount': 1,
                     'InstanceType': 'm3.medium.elasticsearch',
-                    'ZoneAwarenessEnabled': False
+                    'ZoneAwarenessEnabled': False,
                 },
-                'Status': config_status
+                'Status': config_status,
             },
             'ElasticsearchVersion': {
                 'Options': '5.3',
-                'Status': config_status
+                'Status': config_status,
             },
             'EncryptionAtRestOptions': {
-                'Options': {
-                    'Enabled': False,
-                    'KmsKeyId': ''
-                },
-                'Status': config_status
+                'Options': {'Enabled': False, 'KmsKeyId': ''},
+                'Status': config_status,
             },
             'LogPublishingOptions': {
                 'Options': {
                     'INDEX_SLOW_LOGS': {
-                        'CloudWatchLogsLogGroupArn': 'arn:aws:logs:%s:%s:log-group:sample-domain' % (DEFAULT_REGION, TEST_AWS_ACCOUNT_ID),  # noqa: E501
-                        'Enabled': False
+                        'CloudWatchLogsLogGroupArn': f'arn:aws:logs:{DEFAULT_REGION}:{TEST_AWS_ACCOUNT_ID}:log-group:sample-domain',
+                        'Enabled': False,
                     },
                     'SEARCH_SLOW_LOGS': {
-                        'CloudWatchLogsLogGroupArn': 'arn:aws:logs:%s:%s:log-group:sample-domain' % (DEFAULT_REGION, TEST_AWS_ACCOUNT_ID),  # noqa: E501
+                        'CloudWatchLogsLogGroupArn': f'arn:aws:logs:{DEFAULT_REGION}:{TEST_AWS_ACCOUNT_ID}:log-group:sample-domain',
                         'Enabled': False,
-                    }
+                    },
                 },
-                'Status': config_status
+                'Status': config_status,
             },
             'SnapshotOptions': {
-                'Options': {
-                    'AutomatedSnapshotStartHour': randint(0, 23)
-                },
-                'Status': config_status
+                'Options': {'AutomatedSnapshotStartHour': randint(0, 23)},
+                'Status': config_status,
             },
             'VPCOptions': {
                 'Options': {
-                    'AvailabilityZones': [
-                        'us-east-1b'
-                    ],
-                    'SecurityGroupIds': [
-                        'sg-12345678'
-                    ],
-                    'SubnetIds': [
-                        'subnet-12345678'
-                    ],
-                    'VPCId': 'vpc-12345678'
+                    'AvailabilityZones': ['us-east-1b'],
+                    'SecurityGroupIds': ['sg-12345678'],
+                    'SubnetIds': ['subnet-12345678'],
+                    'VPCId': 'vpc-12345678',
                 },
-                'Status': config_status
-            }
+                'Status': config_status,
+            },
         }
     }
 
@@ -125,10 +120,10 @@ def get_domain_config(domain_name):
 def get_domain_status(domain_name, deleted=False):
     return {
         'DomainStatus': {
-            'ARN': 'arn:aws:es:%s:%s:domain/%s' % (DEFAULT_REGION, TEST_AWS_ACCOUNT_ID, domain_name),
+            'ARN': f'arn:aws:es:{DEFAULT_REGION}:{TEST_AWS_ACCOUNT_ID}:domain/{domain_name}',
             'Created': True,
             'Deleted': deleted,
-            'DomainId': '%s/%s' % (TEST_AWS_ACCOUNT_ID, domain_name),
+            'DomainId': f'{TEST_AWS_ACCOUNT_ID}/{domain_name}',
             'DomainName': domain_name,
             'ElasticsearchClusterConfig': {
                 'DedicatedMasterCount': 1,
@@ -136,7 +131,7 @@ def get_domain_status(domain_name, deleted=False):
                 'DedicatedMasterType': 'm3.medium.elasticsearch',
                 'InstanceCount': 1,
                 'InstanceType': 'm3.medium.elasticsearch',
-                'ZoneAwarenessEnabled': False
+                'ZoneAwarenessEnabled': False,
             },
             'ElasticsearchVersion': '6.7',
             'Endpoint': aws_stack.get_elasticsearch_endpoint(domain_name),
@@ -145,13 +140,13 @@ def get_domain_status(domain_name, deleted=False):
                 'EBSEnabled': True,
                 'VolumeType': 'gp2',
                 'VolumeSize': 10,
-                'Iops': 0
+                'Iops': 0,
             },
         }
     }
 
 
-@app.route('%s/domain' % API_PREFIX, methods=['GET'])
+@app.route(f'{API_PREFIX}/domain', methods=['GET'])
 def list_domain_names():
     result = {
         'DomainNames': [{'DomainName': name} for name in ES_DOMAINS.keys()]
@@ -159,7 +154,7 @@ def list_domain_names():
     return jsonify(result)
 
 
-@app.route('%s/es/domain' % API_PREFIX, methods=['POST'])
+@app.route(f'{API_PREFIX}/es/domain', methods=['POST'])
 def create_domain():
     data = json.loads(to_str(request.data))
     domain_name = data['DomainName']
@@ -170,7 +165,7 @@ def create_domain():
     return jsonify(result)
 
 
-@app.route('%s/es/domain/<domain_name>' % API_PREFIX, methods=['GET'])
+@app.route(f'{API_PREFIX}/es/domain/<domain_name>', methods=['GET'])
 def describe_domain(domain_name):
     if domain_name not in ES_DOMAINS:
         return error_response(error_type='ResourceNotFoundException')
@@ -178,13 +173,13 @@ def describe_domain(domain_name):
     return jsonify(result)
 
 
-@app.route('%s/es/domain/<domain_name>/config' % API_PREFIX, methods=['GET', 'POST'])
+@app.route(f'{API_PREFIX}/es/domain/<domain_name>/config', methods=['GET', 'POST'])
 def domain_config(domain_name):
     config = get_domain_config(domain_name)
     return jsonify(config)
 
 
-@app.route('%s/es/domain/<domain_name>' % API_PREFIX, methods=['DELETE'])
+@app.route(f'{API_PREFIX}/es/domain/<domain_name>', methods=['DELETE'])
 def delete_domain(domain_name):
     if domain_name not in ES_DOMAINS:
         return error_response(error_type='ResourceNotFoundException')
@@ -193,7 +188,7 @@ def delete_domain(domain_name):
     return jsonify(result)
 
 
-@app.route('%s/tags' % API_PREFIX, methods=['GET', 'POST'])
+@app.route(f'{API_PREFIX}/tags', methods=['GET', 'POST'])
 def add_list_tags():
     if request.method == 'GET' and request.args.get('arn'):
         response = {

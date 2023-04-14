@@ -49,7 +49,7 @@ class SQSTest(unittest.TestCase):
         self.assertIn(fifo_queue, queue_url)
 
     def test_set_queue_policy(self):
-        fifo_queue = 'queue-%s' % short_uid()
+        fifo_queue = f'queue-{short_uid()}'
         queue_info = self.client.create_queue(QueueName=fifo_queue)
         queue_url = queue_info['QueueUrl']
 

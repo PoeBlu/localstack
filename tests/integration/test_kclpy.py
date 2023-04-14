@@ -24,12 +24,13 @@ class TestKinesisPythonClient(unittest.TestCase):
 
         kinesis = aws_stack.connect_to_service('kinesis')
         num_events_kinesis = 10
-        kinesis.put_records(Records=[
-            {
-                'Data': '{}',
-                'PartitionKey': 'test_%s' % i
-            } for i in range(0, num_events_kinesis)
-        ], StreamName=stream_name)
+        kinesis.put_records(
+            Records=[
+                {'Data': '{}', 'PartitionKey': f'test_{i}'}
+                for i in range(num_events_kinesis)
+            ],
+            StreamName=stream_name,
+        )
 
         def check_events():
             self.assertEqual(len(result), num_events_kinesis)

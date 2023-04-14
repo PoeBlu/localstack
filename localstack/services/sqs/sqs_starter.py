@@ -33,12 +33,11 @@ def start_sqs(port=None, asynchronous=False, update_listener=None):
         sqs-limits = strict
     }
     """ % (LOCALSTACK_HOSTNAME, port, backend_port)
-    config_file = os.path.join(TMP_FOLDER, 'sqs.%s.conf' % short_uid())
+    config_file = os.path.join(TMP_FOLDER, f'sqs.{short_uid()}.conf')
     TMP_FILES.append(config_file)
     save_file(config_file, config_params)
     # start process
-    cmd = ('java -Dconfig.file=%s -Xmx%s -jar %s/elasticmq-server.jar' % (
-        config_file, MAX_HEAP_SIZE, INSTALL_DIR_ELASTICMQ))
-    print('Starting mock SQS (%s port %s)...' % (get_service_protocol(), port))
+    cmd = f'java -Dconfig.file={config_file} -Xmx{MAX_HEAP_SIZE} -jar {INSTALL_DIR_ELASTICMQ}/elasticmq-server.jar'
+    print(f'Starting mock SQS ({get_service_protocol()} port {port})...')
     start_proxy_for_service('sqs', port, backend_port, update_listener)
     return do_run(cmd, asynchronous)

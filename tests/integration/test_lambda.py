@@ -53,7 +53,7 @@ class LambdaTestBase(unittest.TestCase):
 
     def check_lambda_logs(self, func_name, expected_lines=[]):
         logs_client = aws_stack.connect_to_service('logs')
-        log_group_name = '/aws/lambda/%s' % func_name
+        log_group_name = f'/aws/lambda/{func_name}'
         streams = logs_client.describe_log_streams(logGroupName=log_group_name)['logStreams']
         streams = sorted(streams, key=lambda x: x['creationTime'], reverse=True)
         log_events = logs_client.get_log_events(
@@ -77,11 +77,12 @@ class TestLambdaBaseFeatures(unittest.TestCase):
             return len((run_safe(ddb_client.scan, TableName=db_table) or {'Items': []})['Items'])
 
         items_before = num_items()
-        self.run_forward_to_fallback_url('dynamodb://%s' % db_table)
+        self.run_forward_to_fallback_url(f'dynamodb://{db_table}')
         items_after = num_items()
         self.assertEqual(items_after, items_before + 3)
 
     def test_forward_to_fallback_url_http(self):
+
         class MyUpdateListener(ProxyListener):
             def forward_request(self, method, path, data, headers):
                 records.append(data)
@@ -95,7 +96,9 @@ class TestLambdaBaseFeatures(unittest.TestCase):
         proxy = start_proxy(local_port, backend_url=None, update_listener=MyUpdateListener())
 
         items_before = len(records)
-        self.run_forward_to_fallback_url('%s://localhost:%s' % (get_service_protocol(), local_port))
+        self.run_forward_to_fallback_url(
+            f'{get_service_protocol()}://localhost:{local_port}'
+        )
         items_after = len(records)
         self.assertEqual(items_after, items_before + 3)
         proxy.stop()
@@ -105,8 +108,11 @@ class TestLambdaBaseFeatures(unittest.TestCase):
         config.LAMBDA_FALLBACK_URL = url
         try:
             for i in range(num_requests):
-                lambda_client.invoke(FunctionName='non-existing-lambda-%s' % i,
-                    Payload=b'{}', InvocationType='RequestResponse')
+                lambda_client.invoke(
+                    FunctionName=f'non-existing-lambda-{i}',
+                    Payload=b'{}',
+                    InvocationType='RequestResponse',
+                )
         finally:
             config.LAMBDA_FALLBACK_URL = ''
 
@@ -189,7 +195,7 @@ class TestPythonRuntimes(LambdaTestBase):
         testutil.delete_lambda_function(TEST_LAMBDA_NAME_ENV)
 
     def test_invocation_with_qualifier(self):
-        lambda_name = 'test_lambda_%s' % short_uid()
+        lambda_name = f'test_lambda_{short_uid()}'
         bucket_name = 'test_bucket_lambda2'
         bucket_key = 'test_lambda.zip'
 
@@ -243,7 +249,7 @@ class TestPythonRuntimes(LambdaTestBase):
         testutil.delete_lambda_function(lambda_name)
 
     def test_upload_lambda_from_s3(self):
-        lambda_name = 'test_lambda_%s' % short_uid()
+        lambda_name = f'test_lambda_{short_uid()}'
         bucket_name = 'test_bucket_lambda'
         bucket_key = 'test_lambda.zip'
 
@@ -588,7 +594,7 @@ class TestDockerBehaviour(LambdaTestBase):
         durations = []
         num_iterations = 3
 
-        for i in range(0, num_iterations + 1):
+        for i in range(num_iterations + 1):
             prev_invoke_time = None
             if i > 0:
                 prev_invoke_time = executor.function_invoke_times[func_arn]
@@ -644,10 +650,9 @@ class TestDockerBehaviour(LambdaTestBase):
 
         cmd = executor.prepare_execution(func_arn, {}, LAMBDA_RUNTIME_NODEJS810, '', handler, lambda_cwd)
 
-        expected = 'docker run -v "%s":/var/task   --network="%s"  --rm "lambci/lambda:%s" "%s"' % (
-            lambda_cwd, network, LAMBDA_RUNTIME_NODEJS810, handler)
+        expected = f'docker run -v "{lambda_cwd}":/var/task   --network="{network}"  --rm "lambci/lambda:{LAMBDA_RUNTIME_NODEJS810}" "{handler}"'
 
-        self.assertIn(('--network="%s"' % network), cmd, 'cmd=%s expected=%s' % (cmd, expected))
+        self.assertIn(f'--network="{network}"', cmd, f'cmd={cmd} expected={expected}')
 
         config.LAMBDA_DOCKER_NETWORK = ''
 

@@ -49,13 +49,14 @@ def expand_multipart_filename(data, headers):
     boundary = params['boundary'].encode('ascii')
     data_bytes = to_bytes(data)
 
-    filename = None
-
-    for (disposition, _) in _iter_multipart_parts(data_bytes, boundary):
-        if disposition.get('name') == 'file' and 'filename' in disposition:
-            filename = disposition['filename']
-            break
-
+    filename = next(
+        (
+            disposition['filename']
+            for disposition, _ in _iter_multipart_parts(data_bytes, boundary)
+            if disposition.get('name') == 'file' and 'filename' in disposition
+        ),
+        None,
+    )
     if filename is None:
         # Found nothing, return unaltered
         return data

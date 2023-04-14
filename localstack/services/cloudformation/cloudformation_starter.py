@@ -43,10 +43,12 @@ MODEL_MAP = {
 def start_cloudformation(port=None, asynchronous=False, update_listener=None):
     port = port or config.PORT_CLOUDFORMATION
     backend_port = DEFAULT_PORT_CLOUDFORMATION_BACKEND
-    print('Starting mock CloudFormation (%s port %s)...' % (get_service_protocol(), port))
+    print(
+        f'Starting mock CloudFormation ({get_service_protocol()} port {port})...'
+    )
     start_proxy_for_service('cloudformation', port, backend_port, update_listener)
     if RUN_SERVER_IN_PROCESS:
-        cmd = 'python "%s" cloudformation -p %s -H 0.0.0.0' % (__file__, backend_port)
+        cmd = f'python "{__file__}" cloudformation -p {backend_port} -H 0.0.0.0'
         env_vars = {'PYTHONPATH': ':'.join(sys.path)}
         return do_run(cmd, asynchronous, env_vars=env_vars)
     else:
@@ -86,18 +88,21 @@ def apply_patches():
 
     def clean_json(resource_json, resources_map):
         result = clean_json_orig(resource_json, resources_map)
-        if isinstance(result, BaseModel):
-            if isinstance(resource_json, dict) and 'Ref' in resource_json:
-                types_with_ref_as_id_or_name = (apigw_models.RestAPI, apigw_models.Resource)
-                attr_candidates = ['function_arn', 'id', 'name']
-                for attr in attr_candidates:
-                    if hasattr(result, attr):
-                        if attr in ['id', 'name'] and not isinstance(result, types_with_ref_as_id_or_name):
-                            LOG.warning('Unable to find ARN, using "%s" instead: %s - %s',
-                                        attr, resource_json, result)
-                        return getattr(result, attr)
-                LOG.warning('Unable to resolve "Ref" attribute for: %s - %s - %s',
-                            resource_json, result, type(result))
+        if (
+            isinstance(result, BaseModel)
+            and isinstance(resource_json, dict)
+            and 'Ref' in resource_json
+        ):
+            types_with_ref_as_id_or_name = (apigw_models.RestAPI, apigw_models.Resource)
+            attr_candidates = ['function_arn', 'id', 'name']
+            for attr in attr_candidates:
+                if hasattr(result, attr):
+                    if attr in ['id', 'name'] and not isinstance(result, types_with_ref_as_id_or_name):
+                        LOG.warning('Unable to find ARN, using "%s" instead: %s - %s',
+                                    attr, resource_json, result)
+                    return getattr(result, attr)
+            LOG.warning('Unable to resolve "Ref" attribute for: %s - %s - %s',
+                        resource_json, result, type(result))
         return result
 
     clean_json_orig = parsing.clean_json
@@ -113,8 +118,9 @@ def apply_patches():
         try:
             return _parse_and_create_resource(logical_id, resource_json, resources_map, region_name)
         except Exception as e:
-            LOG.error('Unable to parse and create resource "%s": %s %s' %
-                      (logical_id, e, traceback.format_exc()))
+            LOG.error(
+                f'Unable to parse and create resource "{logical_id}": {e} {traceback.format_exc()}'
+            )
             raise
 
     def _parse_and_create_resource(logical_id, resource_json, resources_map, region_name):
@@ -123,7 +129,9 @@ def apply_patches():
 
         # If the current stack is being updated, avoid infinite recursion
         updating = CURRENTLY_UPDATING_RESOURCES.get(resource_hash_key)
-        LOG.debug('Currently updating stack resource %s/%s: %s' % (stack_name, logical_id, updating))
+        LOG.debug(
+            f'Currently updating stack resource {stack_name}/{logical_id}: {updating}'
+        )
         if updating:
             return None
 
@@ -144,12 +152,12 @@ def apply_patches():
         # check whether this resource needs to be deployed
         resource_wrapped = {logical_id: resource_json}
         should_be_created = template_deployer.should_be_deployed(logical_id, resource_wrapped, stack_name)
-        if not should_be_created:
-            # This resource is either not deployable or already exists. Check if it can be updated
-            if not template_deployer.is_updateable(logical_id, resource_wrapped, stack_name):
-                LOG.debug('Resource %s need not be deployed: %s' % (logical_id, resource_json))
-                if resource:
-                    return resource
+        if not should_be_created and not template_deployer.is_updateable(
+            logical_id, resource_wrapped, stack_name
+        ):
+            LOG.debug(f'Resource {logical_id} need not be deployed: {resource_json}')
+            if resource:
+                return resource
 
         if not resource:
             # fix resource ARNs, make sure to convert account IDs 000000000000 to 123456789012
@@ -160,12 +168,14 @@ def apply_patches():
                 resource_json_arns_fixed, resources_map, region_name)
             # Fix for moto which sometimes hard-codes region name as 'us-east-1'
             if hasattr(resource, 'region_name') and resource.region_name != region_name:
-                LOG.debug('Updating incorrect region from %s to %s' % (resource.region_name, region_name))
+                LOG.debug(
+                    f'Updating incorrect region from {resource.region_name} to {region_name}'
+                )
                 resource.region_name = region_name
 
         # Apply some fixes/patches to the resource names, then deploy resource in LocalStack
         update_resource_name(resource, resource_json)
-        LOG.debug('Deploying CloudFormation resource: %s' % resource_json)
+        LOG.debug(f'Deploying CloudFormation resource: {resource_json}')
 
         try:
             CURRENTLY_UPDATING_RESOURCES[resource_hash_key] = True
@@ -188,12 +198,16 @@ def apply_patches():
         if hasattr(resource, 'id') or (isinstance(resource, dict) and resource.get('id')):
             existing_id = resource.id if hasattr(resource, 'id') else resource['id']
             new_res_id = find_id(result)
-            LOG.debug('Updating resource id: %s - %s, %s - %s' % (existing_id, new_res_id, resource, resource_json))
+            LOG.debug(
+                f'Updating resource id: {existing_id} - {new_res_id}, {resource} - {resource_json}'
+            )
             if new_res_id:
-                LOG.info('Updating resource ID from %s to %s (%s)' % (existing_id, new_res_id, region_name))
+                LOG.info(
+                    f'Updating resource ID from {existing_id} to {new_res_id} ({region_name})'
+                )
                 update_resource_id(resource, new_res_id, props, region_name)
             else:
-                LOG.warning('Unable to extract id for resource %s: %s' % (logical_id, result))
+                LOG.warning(f'Unable to extract id for resource {logical_id}: {result}')
 
         # update physical_resource_id field
         update_physical_resource_id(resource)
@@ -251,7 +265,7 @@ def apply_patches():
             backend.apis[api_id].deployments[new_id] = resource
             resource['id'] = new_id
         else:
-            LOG.warning('Unexpected resource type when updating ID: %s' % type(resource))
+            LOG.warning(f'Unexpected resource type when updating ID: {type(resource)}')
 
     def update_physical_resource_id(resource):
         phys_res_id = getattr(resource, 'physical_resource_id', None)
@@ -266,7 +280,9 @@ def apply_patches():
                 act_arn = aws_stack.stepfunctions_activity_arn(resource.params.get('Name'))
                 resource.physical_resource_id = act_arn
             else:
-                LOG.warning('Unable to determine physical_resource_id for resource %s' % type(resource))
+                LOG.warning(
+                    f'Unable to determine physical_resource_id for resource {type(resource)}'
+                )
 
     parse_and_create_resource_orig = parsing.parse_and_create_resource
     parsing.parse_and_create_resource = parse_and_create_resource
@@ -341,7 +357,9 @@ def apply_patches():
                 return streams[0]['StreamArn'] if streams else None
             return DynamoDB_Table_get_cfn_attribute_orig(self, attribute_name)
         except Exception as e:
-            LOG.warning('Unable to get attribute "%s" from resource %s: %s' % (attribute_name, type(self), e))
+            LOG.warning(
+                f'Unable to get attribute "{attribute_name}" from resource {type(self)}: {e}'
+            )
             raise
 
     DynamoDB_Table_get_cfn_attribute_orig = dynamodb_models.Table.get_cfn_attribute
@@ -468,8 +486,8 @@ def inject_stats_endpoint():
         from pympler import muppy, summary
         all_objects = muppy.get_objects()
         result = summary.summarize(all_objects)
-        result = result[0:20]
-        summary = '\n'.join([l for l in summary.format_(result)])
+        result = result[:20]
+        summary = '\n'.join(list(summary.format_(result)))
         result = '%s\n\n%s' % (summary, json.dumps(result))
         return result, 200, {'content-type': 'text/plain'}
 

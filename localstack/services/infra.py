@@ -82,7 +82,7 @@ def register_plugin(plugin):
 
 def update_config_variable(variable, new_value):
     if new_value is not None:
-        LOG.info('Updating value of config variable "%s": %s' % (variable, new_value))
+        LOG.info(f'Updating value of config variable "{variable}": {new_value}')
         setattr(config, variable, new_value)
 
 
@@ -222,7 +222,7 @@ def set_service_status(data):
             if status == 'running':
                 return
         key_upper = service.upper().replace('-', '_')
-        port_variable = 'PORT_%s' % key_upper
+        port_variable = f'PORT_{key_upper}'
         service_list = os.environ.get('SERVICES', '').strip()
         services = [e for e in re.split(r'[\s,]+', service_list) if e]
         contained = [s for s in services if s.startswith(service)]
@@ -232,7 +232,7 @@ def set_service_status(data):
         new_service_list = ','.join(services)
         os.environ['SERVICES'] = new_service_list
         config.populate_configs()
-        LOG.info('Starting service %s on port %s' % (service, port))
+        LOG.info(f'Starting service {service} on port {port}')
         SERVICE_PLUGINS[service].start(asynchronous=True)
     return {}
 
@@ -250,8 +250,13 @@ def get_services_status():
 
 def get_service_status(service, port=None):
     port = port or config.parse_service_ports().get(service)
-    status = 'disabled' if (port or 0) <= 0 else 'running' if is_port_open(port) else 'stopped'
-    return status
+    return (
+        'disabled'
+        if (port or 0) <= 0
+        else 'running'
+        if is_port_open(port)
+        else 'stopped'
+    )
 
 
 def restore_persisted_data(apis):
@@ -288,8 +293,11 @@ def do_run(cmd, asynchronous, print_output=False, env_vars={}):
 
 def start_proxy_for_service(service_name, port, default_backend_port, update_listener, quiet=False, params={}):
     # check if we have a custom backend configured
-    custom_backend_url = os.environ.get('%s_BACKEND' % service_name.upper())
-    backend_url = custom_backend_url or ('http://%s:%s' % (DEFAULT_BACKEND_HOST, default_backend_port))
+    custom_backend_url = os.environ.get(f'{service_name.upper()}_BACKEND')
+    backend_url = (
+        custom_backend_url
+        or f'http://{DEFAULT_BACKEND_HOST}:{default_backend_port}'
+    )
     return start_proxy(port, backend_url=backend_url, update_listener=update_listener, quiet=quiet, params=params)
 
 
@@ -304,7 +312,7 @@ def start_proxy(port, backend_url, update_listener, quiet=False, params={}):
 def start_moto_server(key, port, name=None, backend_port=None, asynchronous=False, update_listener=None):
     if not name:
         name = key
-    print('Starting mock %s (%s port %s)...' % (name, get_service_protocol(), port))
+    print(f'Starting mock {name} ({get_service_protocol()} port {port})...')
     if USE_SSL and not backend_port:
         backend_port = get_free_tcp_port()
     if backend_port:
@@ -315,15 +323,17 @@ def start_moto_server(key, port, name=None, backend_port=None, asynchronous=Fals
 
 
 def start_moto_server_separate(key, port, name=None, backend_port=None, asynchronous=False):
-    moto_server_cmd = '%s/bin/moto_server' % LOCALSTACK_VENV_FOLDER
+    moto_server_cmd = f'{LOCALSTACK_VENV_FOLDER}/bin/moto_server'
     if not os.path.exists(moto_server_cmd):
         moto_server_cmd = run('which moto_server').strip()
-    cmd = 'VALIDATE_LAMBDA_S3=0 %s %s -p %s -H %s' % (moto_server_cmd, key, backend_port or port, constants.BIND_HOST)
+    cmd = f'VALIDATE_LAMBDA_S3=0 {moto_server_cmd} {key} -p {backend_port or port} -H {constants.BIND_HOST}'
     return do_run(cmd, asynchronous)
 
 
 def start_local_api(name, port, method, asynchronous=False):
-    print('Starting mock %s service (%s port %s)...' % (name, get_service_protocol(), port))
+    print(
+        f'Starting mock {name} service ({get_service_protocol()} port {port})...'
+    )
     if asynchronous:
         thread = FuncThread(method, port, quiet=True)
         thread.start()
@@ -380,14 +390,16 @@ def check_infra(retries=10, expect_shutdown=False, apis=None, additional_checks=
                 try:
                     plugin.check(expect_shutdown=expect_shutdown, print_error=print_error)
                 except Exception as e:
-                    LOG.warning('Service "%s" not yet available, retrying...' % name)
+                    LOG.warning(f'Service "{name}" not yet available, retrying...')
                     raise e
 
         for additional in additional_checks:
             additional(expect_shutdown=expect_shutdown)
     except Exception as e:
         if retries <= 0:
-            LOG.error('Error checking state of local environment (after some retries): %s' % traceback.format_exc())
+            LOG.error(
+                f'Error checking state of local environment (after some retries): {traceback.format_exc()}'
+            )
             raise e
         time.sleep(3)
         check_infra(retries - 1, expect_shutdown=expect_shutdown, apis=apis, additional_checks=additional_checks)
@@ -451,7 +463,7 @@ def start_infra(asynchronous=False, apis=None):
     except KeyboardInterrupt:
         print('Shutdown')
     except Exception as e:
-        print('Error starting infrastructure: %s %s' % (e, traceback.format_exc()))
+        print(f'Error starting infrastructure: {e} {traceback.format_exc()}')
         sys.stdout.flush()
         raise e
     finally:

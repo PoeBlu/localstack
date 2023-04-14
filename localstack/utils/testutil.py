@@ -29,7 +29,7 @@ def create_lambda_archive(script, get_content=False, libs=[], runtime=None, file
     save_file(script_file, script)
     # copy libs
     for lib in libs:
-        paths = [lib, '%s.py' % lib]
+        paths = [lib, f'{lib}.py']
         target_dir = tmp_dir
         root_folder = os.path.join(LOCALSTACK_VENV_FOLDER, 'lib/python*/site-packages')
         if lib == 'localstack':
@@ -139,14 +139,15 @@ def assert_object(expected_object, all_objects):
         all_objects = [all_objects]
     found = find_object(expected_object, all_objects)
     if not found:
-        raise Exception('Expected object not found: %s in list %s' % (expected_object, all_objects))
+        raise Exception(
+            f'Expected object not found: {expected_object} in list {all_objects}'
+        )
 
 
 def find_object(expected_object, object_list):
     for obj in object_list:
         if isinstance(obj, list):
-            found = find_object(expected_object, obj)
-            if found:
+            if found := find_object(expected_object, obj):
                 return found
 
         all_ok = True
@@ -203,7 +204,7 @@ def map_all_s3_objects(to_json=True):
             try:
                 if to_json:
                     value = json.loads(value)
-                result['%s/%s' % (key.bucket_name, key.key)] = value
+                result[f'{key.bucket_name}/{key.key}'] = value
             except Exception:
                 # skip non-JSON or binary objects
                 pass
@@ -211,7 +212,7 @@ def map_all_s3_objects(to_json=True):
 
 
 def get_sample_arn(service, resource):
-    return 'arn:aws:%s:%s:%s:%s' % (service, DEFAULT_REGION, TEST_AWS_ACCOUNT_ID, resource)
+    return f'arn:aws:{service}:{DEFAULT_REGION}:{TEST_AWS_ACCOUNT_ID}:{resource}'
 
 
 def send_describe_dynamodb_ttl_request(table_name):
@@ -231,10 +232,10 @@ def send_update_dynamodb_ttl_request(table_name, ttl_status):
 def send_dynamodb_request(path, action, request_body):
     headers = {
         'Host': 'dynamodb.amazonaws.com',
-        'x-amz-target': 'DynamoDB_20120810.{}'.format(action),
-        'authorization': 'some_token'
+        'x-amz-target': f'DynamoDB_20120810.{action}',
+        'authorization': 'some_token',
     }
-    url = '{}/{}'.format(os.getenv('TEST_DYNAMODB_URL'), path)
+    url = f"{os.getenv('TEST_DYNAMODB_URL')}/{path}"
     return requests.put(url, data=request_body, headers=headers, verify=False)
 
 

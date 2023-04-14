@@ -17,7 +17,9 @@ package_data = {}
 # determine version
 with open('localstack/constants.py') as f:
     constants = f.read()
-version = re.search(r'^\s*VERSION\s*=\s*[\'"](.+)[\'"]\s*$', constants, re.MULTILINE).group(1)
+version = re.search(
+    r'^\s*VERSION\s*=\s*[\'"](.+)[\'"]\s*$', constants, re.MULTILINE
+)[1]
 
 
 # determine requirements
@@ -25,15 +27,13 @@ with open('requirements.txt') as f:
     requirements = f.read()
 for line in re.split('\n', requirements):
     if line and line[0] == '#' and '#egg=' in line:
-        line = re.search(r'#\s*(.*)', line).group(1)
-    if line and line[0] != '#':
-        # include only basic requirements here
-        if IGNORED_LIB_MARKER not in line:
-            lib_stripped = line.split(' #')[0].strip()
-            if BASIC_LIB_MARKER in line:
-                install_requires.append(lib_stripped)
-            else:
-                extra_requires.append(lib_stripped)
+        line = re.search(r'#\s*(.*)', line)[1]
+    if line and line[0] != '#' and IGNORED_LIB_MARKER not in line:
+        lib_stripped = line.split(' #')[0].strip()
+        if BASIC_LIB_MARKER in line:
+            install_requires.append(lib_stripped)
+        else:
+            extra_requires.append(lib_stripped)
 
 # copy requirements file, to make it available inside the package at runtime
 with open('localstack/requirements.copy.txt', 'w') as f:

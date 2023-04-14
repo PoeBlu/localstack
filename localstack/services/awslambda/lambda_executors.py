@@ -22,7 +22,7 @@ from localstack.services.install import INSTALL_PATH_LOCALSTACK_FAT_JAR
 # constants
 LAMBDA_EXECUTOR_JAR = INSTALL_PATH_LOCALSTACK_FAT_JAR
 LAMBDA_EXECUTOR_CLASS = 'cloud.localstack.LambdaExecutor'
-EVENT_FILE_PATTERN = '%s/lambda.event.*.json' % config.TMP_FOLDER
+EVENT_FILE_PATTERN = f'{config.TMP_FOLDER}/lambda.event.*.json'
 
 LAMBDA_RUNTIME_PYTHON27 = 'python2.7'
 LAMBDA_RUNTIME_PYTHON36 = 'python3.6'
@@ -96,9 +96,9 @@ class LambdaExecutor(object):
         if not aws_stack.is_service_enabled('logs'):
             return
         logs_client = aws_stack.connect_to_service('logs')
-        log_group_name = '/aws/lambda/%s' % func_details.name()
+        log_group_name = f'/aws/lambda/{func_details.name()}'
         time_str = time.strftime('%Y/%m/%d', time.gmtime(invocation_time))
-        log_stream_name = '%s/[$LATEST]%s' % (time_str, short_uid())
+        log_stream_name = f'{time_str}/[$LATEST]{short_uid()}'
 
         # make sure that the log group exists
         log_groups = logs_client.describe_log_groups()['logGroups']
@@ -189,7 +189,9 @@ class LambdaExecutorContainers(LambdaExecutor):
 
         # prepare event body
         if not event:
-            LOG.warning('Empty event body specified for invocation of Lambda "%s"' % func_arn)
+            LOG.warning(
+                f'Empty event body specified for invocation of Lambda "{func_arn}"'
+            )
             event = {}
         event_body = json.dumps(json_safe(event))
         stdin = self.prepare_event(environment, event_body)
@@ -225,7 +227,7 @@ class LambdaExecutorContainers(LambdaExecutor):
         cmd = self.prepare_execution(func_arn, environment, runtime, command, handler, lambda_cwd)
 
         # lambci writes the Lambda result to stdout and logs to stderr, fetch it from there!
-        LOG.debug('Running lambda cmd: %s' % cmd)
+        LOG.debug(f'Running lambda cmd: {cmd}')
         result, log_output = self.run_lambda_executor(cmd, stdin, environment)
         log_formatted = log_output.strip().replace('\n', '\n> ')
         LOG.debug('Lambda %s result / log output:\n%s\n>%s' % (func_arn, result.strip(), log_formatted))
@@ -265,30 +267,23 @@ class LambdaExecutorReuseContainers(LambdaExecutorContainers):
         # Note: currently "docker exec" does not support --env-file, i.e., environment variables can only be
         # passed directly on the command line, using "-e" below. TODO: Update this code once --env-file is
         # available for docker exec, to better support very large Lambda events (very long environment values)
-        exec_env_vars = ' '.join(['-e {}="${}"'.format(k, k) for (k, v) in env_vars.items()])
+        exec_env_vars = ' '.join([f'-e {k}="${k}"' for (k, v) in env_vars.items()])
 
         if not command:
-            command = '%s %s' % (container_info.entry_point, handler)
+            command = f'{container_info.entry_point} {handler}'
 
-        # determine files to be copied into the container
-        copy_command = ''
         docker_cmd = self._docker_cmd()
         event_file = os.path.join(lambda_cwd, LAMBDA_EVENT_FILE)
+        copy_command = ''
         if not has_been_invoked_before:
             # if this is the first invocation: copy the entire folder into the container
-            copy_command = '%s cp "%s/." "%s:/var/task";' % (docker_cmd, lambda_cwd, container_info.name)
+            copy_command = f'{docker_cmd} cp "{lambda_cwd}/." "{container_info.name}:/var/task";'
         elif os.path.exists(event_file):
             # otherwise, copy only the event file if it exists
-            copy_command = '%s cp "%s" "%s:/var/task";' % (docker_cmd, event_file, container_info.name)
+            copy_command = f'{docker_cmd} cp "{event_file}" "{container_info.name}:/var/task";'
 
-        cmd = (
-            '%s'
-            ' %s exec'
-            ' %s'  # env variables
-            ' %s'  # container name
-            ' %s'  # run cmd
-        ) % (copy_command, docker_cmd, exec_env_vars, container_info.name, command)
-        LOG.debug('Command for docker-reuse Lambda executor: %s' % cmd)
+        cmd = f'{copy_command} {docker_cmd} exec {exec_env_vars} {container_info.name} {command}'
+        LOG.debug(f'Command for docker-reuse Lambda executor: {cmd}')
 
         return cmd
 
@@ -319,53 +314,39 @@ class LambdaExecutorReuseContainers(LambdaExecutorContainers):
             docker_cmd = self._docker_cmd()
 
             status = self.get_docker_container_status(func_arn)
-            LOG.debug('Priming docker container (status "%s"): %s' % (status, container_name))
+            LOG.debug(f'Priming docker container (status "{status}"): {container_name}')
 
             # Container is not running or doesn't exist.
             if status < 1:
                 # Make sure the container does not exist in any form/state.
                 self.destroy_docker_container(func_arn)
 
-                env_vars_str = ' '.join(['-e {}={}'.format(k, cmd_quote(v)) for (k, v) in env_vars])
+                env_vars_str = ' '.join([f'-e {k}={cmd_quote(v)}' for (k, v) in env_vars])
 
                 network = config.LAMBDA_DOCKER_NETWORK
-                network_str = ' --network="%s" ' % network if network else ''
-
                 # Create and start the container
-                LOG.debug('Creating container: %s' % container_name)
-                cmd = (
-                    '%s create'
-                    ' --rm'
-                    ' --name "%s"'
-                    ' --entrypoint /bin/bash'  # Load bash when it starts.
-                    ' --interactive'  # Keeps the container running bash.
-                    ' -e AWS_LAMBDA_EVENT_BODY="$AWS_LAMBDA_EVENT_BODY"'
-                    ' -e HOSTNAME="$HOSTNAME"'
-                    ' -e LOCALSTACK_HOSTNAME="$LOCALSTACK_HOSTNAME"'
-                    '  %s'  # env_vars
-                    '  %s'  # network
-                    ' lambci/lambda:%s'
-                ) % (docker_cmd, container_name, env_vars_str, network_str, runtime)
+                LOG.debug(f'Creating container: {container_name}')
+                network_str = f' --network="{network}" ' if network else ''
+                cmd = f'{docker_cmd} create --rm --name "{container_name}" --entrypoint /bin/bash --interactive -e AWS_LAMBDA_EVENT_BODY="$AWS_LAMBDA_EVENT_BODY" -e HOSTNAME="$HOSTNAME" -e LOCALSTACK_HOSTNAME="$LOCALSTACK_HOSTNAME"  {env_vars_str}  {network_str} lambci/lambda:{runtime}'
                 LOG.debug(cmd)
                 run(cmd)
 
-                LOG.debug('Copying files to container "%s" from "%s".' % (container_name, lambda_cwd))
-                cmd = (
-                    '%s cp'
-                    ' "%s/." "%s:/var/task"'
-                ) % (docker_cmd, lambda_cwd, container_name)
+                LOG.debug(
+                    f'Copying files to container "{container_name}" from "{lambda_cwd}".'
+                )
+                cmd = f'{docker_cmd} cp "{lambda_cwd}/." "{container_name}:/var/task"'
                 LOG.debug(cmd)
                 run(cmd)
 
-                LOG.debug('Starting container: %s' % container_name)
-                cmd = '%s start %s' % (docker_cmd, container_name)
+                LOG.debug(f'Starting container: {container_name}')
+                cmd = f'{docker_cmd} start {container_name}'
                 LOG.debug(cmd)
                 run(cmd)
                 # give the container some time to start up
                 time.sleep(1)
 
             # Get the entry point for the image.
-            LOG.debug('Getting the entrypoint for image: lambci/lambda:%s' % runtime)
+            LOG.debug(f'Getting the entrypoint for image: lambci/lambda:{runtime}')
             cmd = (
                 '%s image inspect'
                 ' --format="{{ .ContainerConfig.Entrypoint }}"'
@@ -379,8 +360,9 @@ class LambdaExecutorReuseContainers(LambdaExecutorContainers):
 
             container_network = self.get_docker_container_network(func_arn)
 
-            LOG.debug('Using entrypoint "%s" for container "%s" on network "%s".'
-                % (entry_point, container_name, container_network))
+            LOG.debug(
+                f'Using entrypoint "{entry_point}" for container "{container_name}" on network "{container_network}".'
+            )
 
             return ContainerInfo(container_name, entry_point)
 
@@ -398,10 +380,8 @@ class LambdaExecutorReuseContainers(LambdaExecutorContainers):
             container_name = self.get_container_name(func_arn)
 
             if status == 1:
-                LOG.debug('Stopping container: %s' % container_name)
-                cmd = (
-                    '%s stop -t0 %s'
-                ) % (docker_cmd, container_name)
+                LOG.debug(f'Stopping container: {container_name}')
+                cmd = f'{docker_cmd} stop -t0 {container_name}'
 
                 LOG.debug(cmd)
                 run(cmd, asynchronous=False, stderr=subprocess.PIPE, outfile=subprocess.PIPE)
@@ -409,10 +389,8 @@ class LambdaExecutorReuseContainers(LambdaExecutorContainers):
                 status = self.get_docker_container_status(func_arn)
 
             if status == -1:
-                LOG.debug('Removing container: %s' % container_name)
-                cmd = (
-                    '%s rm %s'
-                ) % (docker_cmd, container_name)
+                LOG.debug(f'Removing container: {container_name}')
+                cmd = f'{docker_cmd} rm {container_name}'
 
                 LOG.debug(cmd)
                 run(cmd, asynchronous=False, stderr=subprocess.PIPE, outfile=subprocess.PIPE)
@@ -428,12 +406,7 @@ class LambdaExecutorReuseContainers(LambdaExecutorContainers):
             LOG.debug(cmd)
             cmd_result = run(cmd, asynchronous=False, stderr=subprocess.PIPE, outfile=subprocess.PIPE).strip()
 
-            if len(cmd_result) > 0:
-                container_names = cmd_result.split('\n')
-            else:
-                container_names = []
-
-            return container_names
+            return cmd_result.split('\n') if len(cmd_result) > 0 else []
 
     def destroy_existing_docker_containers(self):
         """
@@ -445,7 +418,7 @@ class LambdaExecutorReuseContainers(LambdaExecutorContainers):
 
             LOG.debug('Removing %d containers.' % len(container_names))
             for container_name in container_names:
-                cmd = '%s rm -f %s' % (self._docker_cmd(), container_name)
+                cmd = f'{self._docker_cmd()} rm -f {container_name}'
                 LOG.debug(cmd)
                 run(cmd, asynchronous=False, stderr=subprocess.PIPE, outfile=subprocess.PIPE)
 
@@ -467,7 +440,7 @@ class LambdaExecutorReuseContainers(LambdaExecutorContainers):
             cmd = ("docker ps -a --filter name='%s' "
                    '--format "{{ .Status }} - {{ .Names }}" '
                    '| grep -w "%s" | cat') % (container_name, container_name)
-            LOG.debug('Getting status for container "%s": %s' % (container_name, cmd))
+            LOG.debug(f'Getting status for container "{container_name}": {cmd}')
             cmd_result = run(cmd)
 
             # If the container doesn't exist. Create and start it.
@@ -476,10 +449,7 @@ class LambdaExecutorReuseContainers(LambdaExecutorContainers):
             if len(container_status) == 0:
                 return 0
 
-            if container_status.lower().startswith('up '):
-                return 1
-
-            return -1
+            return 1 if container_status.lower().startswith('up ') else -1
 
     def get_docker_container_network(self, func_arn):
         """
@@ -501,7 +471,7 @@ class LambdaExecutorReuseContainers(LambdaExecutorContainers):
             docker_cmd = self._docker_cmd()
 
             # Get the container network
-            LOG.debug('Getting container network: %s' % container_name)
+            LOG.debug(f'Getting container network: {container_name}')
             cmd = (
                 '%s inspect %s'
                 ' --format "{{ .HostConfig.NetworkMode }}"'
@@ -510,9 +480,7 @@ class LambdaExecutorReuseContainers(LambdaExecutorContainers):
             LOG.debug(cmd)
             cmd_result = run(cmd, asynchronous=False, stderr=subprocess.PIPE, outfile=subprocess.PIPE)
 
-            container_network = cmd_result.strip()
-
-            return container_network
+            return cmd_result.strip()
 
     def idle_container_destroyer(self):
         """
@@ -563,44 +531,25 @@ class LambdaExecutorSeparateContainers(LambdaExecutorContainers):
         if command:
             entrypoint = ' --entrypoint ""'
         else:
-            command = '"%s"' % handler
+            command = f'"{handler}"'
 
-        env_vars_string = ' '.join(['-e {}="${}"'.format(k, k) for (k, v) in env_vars.items()])
-        debug_docker_java_port = ' -p "%s":"%s"' % (self.debug_java_port, self.debug_java_port)
+        env_vars_string = ' '.join([f'-e {k}="${k}"' for (k, v) in env_vars.items()])
+        debug_docker_java_port = (
+            f' -p "{self.debug_java_port}":"{self.debug_java_port}"'
+        )
         network = config.LAMBDA_DOCKER_NETWORK
-        network_str = ' --network="%s" ' % network if network else ''
+        network_str = f' --network="{network}" ' if network else ''
         docker_cmd = self._docker_cmd()
 
         if config.LAMBDA_REMOTE_DOCKER:
-            cmd = (
-                'CONTAINER_ID="$(docker create -i'
-                ' %s'
-                ' %s'
-                ' %s'
-                ' %s'  # network
-                ' "lambci/lambda:%s" %s'
-                ')";'
-                '%s cp "%s/." "$CONTAINER_ID:/var/task"; '
-                '%s start -ai "$CONTAINER_ID";'
-            ) % (entrypoint, debug_docker_java_port, env_vars_string, network_str, runtime, command,
-                 docker_cmd,
-                 lambda_cwd,
-                 docker_cmd)
-        else:
-            lambda_cwd_on_host = self.get_host_path_for_path_in_docker(lambda_cwd)
-            cmd = (
-                '%s run -i'
-                ' %s -v "%s":/var/task'
-                ' %s'
-                ' %s'  # network
-                ' --rm'
-                ' "lambci/lambda:%s" %s'
-            ) % (docker_cmd, entrypoint, lambda_cwd_on_host, env_vars_string, network_str, runtime, command)
-        return cmd
+            return f'CONTAINER_ID="$(docker create -i {entrypoint} {debug_docker_java_port} {env_vars_string} {network_str} "lambci/lambda:{runtime}" {command})";{docker_cmd} cp "{lambda_cwd}/." "$CONTAINER_ID:/var/task"; {docker_cmd} start -ai "$CONTAINER_ID";'
+        lambda_cwd_on_host = self.get_host_path_for_path_in_docker(lambda_cwd)
+        return f'{docker_cmd} run -i {entrypoint} -v "{lambda_cwd_on_host}":/var/task {env_vars_string} {network_str} --rm "lambci/lambda:{runtime}" {command}'
 
     def get_host_path_for_path_in_docker(self, path):
-        return re.sub(r'^%s/(.*)$' % config.TMP_FOLDER,
-                    r'%s/\1' % config.HOST_TMP_FOLDER, path)
+        return re.sub(
+            f'^{config.TMP_FOLDER}/(.*)$', r'%s/\1' % config.HOST_TMP_FOLDER, path
+        )
 
 
 class LambdaExecutorLocal(LambdaExecutor):
@@ -639,8 +588,8 @@ class LambdaExecutorLocal(LambdaExecutor):
         save_file(event_file, json.dumps(event))
         TMP_FILES.append(event_file)
         class_name = handler.split('::')[0]
-        classpath = '%s:%s' % (LAMBDA_EXECUTOR_JAR, main_file)
-        cmd = 'java -cp %s %s %s %s' % (classpath, LAMBDA_EXECUTOR_CLASS, class_name, event_file)
+        classpath = f'{LAMBDA_EXECUTOR_JAR}:{main_file}'
+        cmd = f'java -cp {classpath} {LAMBDA_EXECUTOR_CLASS} {class_name} {event_file}'
         result, log_output = self.run_lambda_executor(cmd)
         LOG.debug('Lambda result / log output:\n%s\n> %s' % (
             result.strip(), log_output.strip().replace('\n', '\n> ')))
@@ -653,9 +602,7 @@ class Util:
     def get_java_opts(port):
         opts = config.LAMBDA_JAVA_OPTS
         if opts.find('_debug_port_'):
-            java_opts = opts.replace('_debug_port_', ('%s' % port))
-            return java_opts
-
+            return opts.replace('_debug_port_', f'{port}')
         return opts
 
 

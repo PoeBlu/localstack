@@ -16,7 +16,7 @@ LOGGER = logging.getLogger(__name__)
 def delete_all_elasticsearch_data():
     """ This function drops ALL data in the local Elasticsearch data folder. Use with caution! """
     data_dir = os.path.join(LOCALSTACK_ROOT_FOLDER, 'infra', 'elasticsearch', 'data', 'elasticsearch', 'nodes')
-    run('rm -rf "%s"' % data_dir)
+    run(f'rm -rf "{data_dir}"')
 
 
 def start_elasticsearch(port=None, delete_data=True, asynchronous=False, update_listener=None):
@@ -26,11 +26,11 @@ def start_elasticsearch(port=None, delete_data=True, asynchronous=False, update_
 
     install.install_elasticsearch()
     backend_port = DEFAULT_PORT_ELASTICSEARCH_BACKEND
-    es_data_dir = '%s/infra/elasticsearch/data' % (ROOT_PATH)
-    es_tmp_dir = '%s/infra/elasticsearch/tmp' % (ROOT_PATH)
-    es_mods_dir = '%s/infra/elasticsearch/modules' % (ROOT_PATH)
+    es_data_dir = f'{ROOT_PATH}/infra/elasticsearch/data'
+    es_tmp_dir = f'{ROOT_PATH}/infra/elasticsearch/tmp'
+    es_mods_dir = f'{ROOT_PATH}/infra/elasticsearch/modules'
     if config.DATA_DIR:
-        es_data_dir = '%s/elasticsearch' % config.DATA_DIR
+        es_data_dir = f'{config.DATA_DIR}/elasticsearch'
     # Elasticsearch 5.x cannot be bound to 0.0.0.0 in some Docker environments,
     # hence we use the default bind address 127.0.0.0 and put a proxy in front of it
     cmd = (('%s/infra/elasticsearch/bin/elasticsearch ' +
@@ -43,11 +43,13 @@ def start_elasticsearch(port=None, delete_data=True, asynchronous=False, update_
         'ES_JAVA_OPTS': os.environ.get('ES_JAVA_OPTS', '-Xms200m -Xmx600m'),
         'ES_TMPDIR': es_tmp_dir
     }
-    print('Starting local Elasticsearch (%s port %s)...' % (get_service_protocol(), port))
+    print(
+        f'Starting local Elasticsearch ({get_service_protocol()} port {port})...'
+    )
     if delete_data:
-        run('rm -rf %s' % es_data_dir)
+        run(f'rm -rf {es_data_dir}')
     # fix permissions
-    chmod_r('%s/infra/elasticsearch' % ROOT_PATH, 0o777)
+    chmod_r(f'{ROOT_PATH}/infra/elasticsearch', 0o777)
     mkdir(es_data_dir)
     chmod_r(es_data_dir, 0o777)
     mkdir(es_tmp_dir)
@@ -56,9 +58,8 @@ def start_elasticsearch(port=None, delete_data=True, asynchronous=False, update_
     start_proxy_for_service('elasticsearch', port, backend_port,
         update_listener, quiet=True, params={'protocol_version': 'HTTP/1.0'})
     if is_root():
-        cmd = "su localstack -c '%s'" % cmd
-    thread = do_run(cmd, asynchronous, env_vars=env_vars)
-    return thread
+        cmd = f"su localstack -c '{cmd}'"
+    return do_run(cmd, asynchronous, env_vars=env_vars)
 
 
 def check_elasticsearch(expect_shutdown=False, print_error=False):
@@ -69,7 +70,9 @@ def check_elasticsearch(expect_shutdown=False, print_error=False):
         out = es.cat.aliases()
     except Exception as e:
         if print_error:
-            LOGGER.error('Elasticsearch health check failed (retrying...): %s %s' % (e, traceback.format_exc()))
+            LOGGER.error(
+                f'Elasticsearch health check failed (retrying...): {e} {traceback.format_exc()}'
+            )
     if expect_shutdown:
         assert out is None
     else:

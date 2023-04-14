@@ -18,8 +18,7 @@ def get_kcl_dir():
 
 
 def get_kcl_jar_path():
-    jars = ':'.join(glob(os.path.join(get_kcl_dir(), 'jars', '*jar')))
-    return jars
+    return ':'.join(glob(os.path.join(get_kcl_dir(), 'jars', '*jar')))
 
 
 def get_kcl_classpath(properties=None, paths=[]):
@@ -78,7 +77,7 @@ def get_kcl_app_command(java, multi_lang_daemon_class, properties, paths=[]):
              properties and custom paths and java.
     """
     logging_config = os.path.join(get_dir_of_file(__file__), 'java', 'logging.properties')
-    sys_props = '"-Djava.util.logging.config.file=%s"' % logging_config
+    sys_props = f'"-Djava.util.logging.config.file={logging_config}"'
     return '{java} -cp {cp} {sys_props} {daemon} {props}'.format(
         java=java,
         cp=get_kcl_classpath(properties, paths),

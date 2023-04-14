@@ -20,14 +20,16 @@ from localstack.utils.common import (
 THIS_PATH = os.path.dirname(os.path.realpath(__file__))
 ROOT_PATH = os.path.realpath(os.path.join(THIS_PATH, '..'))
 
-INSTALL_DIR_INFRA = '%s/infra' % ROOT_PATH
-INSTALL_DIR_NPM = '%s/node_modules' % ROOT_PATH
-INSTALL_DIR_ES = '%s/elasticsearch' % INSTALL_DIR_INFRA
-INSTALL_DIR_DDB = '%s/dynamodb' % INSTALL_DIR_INFRA
-INSTALL_DIR_KCL = '%s/amazon-kinesis-client' % INSTALL_DIR_INFRA
-INSTALL_DIR_STEPFUNCTIONS = '%s/stepfunctions' % INSTALL_DIR_INFRA
-INSTALL_DIR_ELASTICMQ = '%s/elasticmq' % INSTALL_DIR_INFRA
-INSTALL_PATH_LOCALSTACK_FAT_JAR = '%s/localstack-utils-fat.jar' % INSTALL_DIR_INFRA
+INSTALL_DIR_INFRA = f'{ROOT_PATH}/infra'
+INSTALL_DIR_NPM = f'{ROOT_PATH}/node_modules'
+INSTALL_DIR_ES = f'{INSTALL_DIR_INFRA}/elasticsearch'
+INSTALL_DIR_DDB = f'{INSTALL_DIR_INFRA}/dynamodb'
+INSTALL_DIR_KCL = f'{INSTALL_DIR_INFRA}/amazon-kinesis-client'
+INSTALL_DIR_STEPFUNCTIONS = f'{INSTALL_DIR_INFRA}/stepfunctions'
+INSTALL_DIR_ELASTICMQ = f'{INSTALL_DIR_INFRA}/elasticmq'
+INSTALL_PATH_LOCALSTACK_FAT_JAR = (
+    f'{INSTALL_DIR_INFRA}/localstack-utils-fat.jar'
+)
 URL_LOCALSTACK_FAT_JAR = ('https://repo1.maven.org/maven2/' +
     'cloud/localstack/localstack-utils/{v}/localstack-utils-{v}-fat.jar').format(v=LOCALSTACK_MAVEN_VERSION)
 
@@ -47,11 +49,11 @@ def install_elasticsearch():
         download_and_extract_with_retry(ELASTICSEARCH_JAR_URL, tmp_archive, INSTALL_DIR_INFRA)
         elasticsearch_dir = glob.glob(os.path.join(INSTALL_DIR_INFRA, 'elasticsearch*'))
         if not elasticsearch_dir:
-            raise Exception('Unable to find Elasticsearch folder in %s' % INSTALL_DIR_INFRA)
+            raise Exception(f'Unable to find Elasticsearch folder in {INSTALL_DIR_INFRA}')
         shutil.move(elasticsearch_dir[0], INSTALL_DIR_ES)
 
         for dir_name in ('data', 'logs', 'modules', 'plugins', 'config/scripts'):
-            dir_path = '%s/%s' % (INSTALL_DIR_ES, dir_name)
+            dir_path = f'{INSTALL_DIR_ES}/{dir_name}'
             mkdir(dir_path)
             chmod_r(dir_path, 0o777)
 
@@ -61,8 +63,8 @@ def install_elasticsearch():
                 # https://github.com/pires/docker-elasticsearch/issues/56
                 os.environ['ES_TMPDIR'] = '/tmp'
             plugin_binary = os.path.join(INSTALL_DIR_ES, 'bin', 'elasticsearch-plugin')
-            print('install elasticsearch-plugin %s' % (plugin))
-            run('%s install -b  %s' % (plugin_binary, plugin))
+            print(f'install elasticsearch-plugin {plugin}')
+            run(f'{plugin_binary} install -b  {plugin}')
 
     # delete some plugins to free up space
     for plugin in ELASTICSEARCH_DELETE_MODULES:
@@ -94,10 +96,10 @@ def install_elasticmq():
 
 
 def install_kinesalite():
-    target_dir = '%s/kinesalite' % INSTALL_DIR_NPM
+    target_dir = f'{INSTALL_DIR_NPM}/kinesalite'
     if not os.path.exists(target_dir):
         log_install_msg('Kinesis')
-        run('cd "%s" && npm install' % ROOT_PATH)
+        run(f'cd "{ROOT_PATH}" && npm install')
 
 
 def install_stepfunctions_local():
@@ -118,15 +120,15 @@ def install_dynamodb_local():
     # fix for Alpine, otherwise DynamoDBLocal fails with:
     # DynamoDBLocal_lib/libsqlite4java-linux-amd64.so: __memcpy_chk: symbol not found
     if is_alpine():
-        ddb_libs_dir = '%s/DynamoDBLocal_lib' % INSTALL_DIR_DDB
-        patched_marker = '%s/alpine_fix_applied' % ddb_libs_dir
+        ddb_libs_dir = f'{INSTALL_DIR_DDB}/DynamoDBLocal_lib'
+        patched_marker = f'{ddb_libs_dir}/alpine_fix_applied'
         if not os.path.exists(patched_marker):
             patched_lib = ('https://rawgit.com/bhuisgen/docker-alpine/master/alpine-dynamodb/' +
                 'rootfs/usr/local/dynamodb/DynamoDBLocal_lib/libsqlite4java-linux-amd64.so')
             patched_jar = ('https://rawgit.com/bhuisgen/docker-alpine/master/alpine-dynamodb/' +
                 'rootfs/usr/local/dynamodb/DynamoDBLocal_lib/sqlite4java.jar')
-            run("curl -L -o %s/libsqlite4java-linux-amd64.so '%s'" % (ddb_libs_dir, patched_lib))
-            run("curl -L -o %s/sqlite4java.jar '%s'" % (ddb_libs_dir, patched_jar))
+            run(f"curl -L -o {ddb_libs_dir}/libsqlite4java-linux-amd64.so '{patched_lib}'")
+            run(f"curl -L -o {ddb_libs_dir}/sqlite4java.jar '{patched_jar}'")
             save_file(patched_marker, '')
 
     # fix logging configuration for DynamoDBLocal
@@ -142,7 +144,7 @@ def install_dynamodb_local():
     </Configuration>"""
     log4j2_file = os.path.join(INSTALL_DIR_DDB, 'log4j2.xml')
     save_file(log4j2_file, log4j2_config)
-    run('cd "%s" && zip -u DynamoDBLocal.jar log4j2.xml || true' % INSTALL_DIR_DDB)
+    run(f'cd "{INSTALL_DIR_DDB}" && zip -u DynamoDBLocal.jar log4j2.xml || true')
 
 
 def install_amazon_kinesis_client_libs():
@@ -156,11 +158,12 @@ def install_amazon_kinesis_client_libs():
     # Compile Java files
     from localstack.utils.kinesis import kclipy_helper
     classpath = kclipy_helper.get_kcl_classpath()
-    java_files = '%s/utils/kinesis/java/cloud/localstack/*.java' % ROOT_PATH
-    class_files = '%s/utils/kinesis/java/cloud/localstack/*.class' % ROOT_PATH
+    java_files = f'{ROOT_PATH}/utils/kinesis/java/cloud/localstack/*.java'
+    class_files = f'{ROOT_PATH}/utils/kinesis/java/cloud/localstack/*.class'
     if not glob.glob(class_files):
-        run('javac -source %s -target %s -cp "%s" %s' % (
-            JAVAC_TARGET_VERSION, JAVAC_TARGET_VERSION, classpath, java_files))
+        run(
+            f'javac -source {JAVAC_TARGET_VERSION} -target {JAVAC_TARGET_VERSION} -cp "{classpath}" {java_files}'
+        )
 
 
 def install_lambda_java_libs():
@@ -178,8 +181,7 @@ def install_component(name):
         'sqs': install_elasticmq,
         'stepfunctions': install_stepfunctions_local
     }
-    installer = installers.get(name)
-    if installer:
+    if installer := installers.get(name):
         installer()
 
 
@@ -197,8 +199,10 @@ def install_all_components():
 # -----------------
 
 def log_install_msg(component, verbatim=False):
-    component = component if verbatim else 'local %s server' % component
-    LOGGER.info('Downloading and installing %s. This may take some time.' % component)
+    component = component if verbatim else f'local {component} server'
+    LOGGER.info(
+        f'Downloading and installing {component}. This may take some time.'
+    )
 
 
 def is_alpine():
@@ -221,20 +225,20 @@ def download_and_extract_with_retry(archive_url, tmp_archive, target_dir):
         download_and_extract()
     except Exception:
         # try deleting and re-downloading the zip file
-        LOGGER.info('Unable to extract file, re-downloading ZIP archive: %s' % tmp_archive)
+        LOGGER.info(
+            f'Unable to extract file, re-downloading ZIP archive: {tmp_archive}'
+        )
         rm_rf(tmp_archive)
         download_and_extract()
 
 
-if __name__ == '__main__':
-
-    if len(sys.argv) > 1:
-        if sys.argv[1] == 'libs':
-            print('Initializing installation.')
-            logging.basicConfig(level=logging.INFO)
-            logging.getLogger('requests').setLevel(logging.WARNING)
-            install_all_components()
-        if sys.argv[1] in ('libs', 'testlibs'):
-            # Install additional libraries for testing
-            install_amazon_kinesis_client_libs()
-        print('Done.')
+if __name__ == '__main__' and len(sys.argv) > 1:
+    if sys.argv[1] == 'libs':
+        print('Initializing installation.')
+        logging.basicConfig(level=logging.INFO)
+        logging.getLogger('requests').setLevel(logging.WARNING)
+        install_all_components()
+    if sys.argv[1] in ('libs', 'testlibs'):
+        # Install additional libraries for testing
+        install_amazon_kinesis_client_libs()
+    print('Done.')

@@ -41,7 +41,7 @@ def make_response(operation_name, content='', code=200):
 
 
 def validate_template(req_data):
-    LOG.debug('Validate CloudFormation template: %s' % req_data)
+    LOG.debug(f'Validate CloudFormation template: {req_data}')
     response_content = """
         <Capabilities></Capabilities>
         <CapabilitiesReason></CapabilitiesReason>
@@ -52,11 +52,9 @@ def validate_template(req_data):
     """
     try:
         template_deployer.template_to_json(req_data.get('TemplateBody')[0])
-        response = make_response('ValidateTemplate', response_content)
-        return response
+        return make_response('ValidateTemplate', response_content)
     except Exception as err:
-        response = error_response('Template Validation Error: %s' % err)
-        return response
+        return error_response(f'Template Validation Error: {err}')
 
 
 class ProxyListenerCloudFormation(ProxyListener):
@@ -85,26 +83,25 @@ class ProxyListenerCloudFormation(ProxyListener):
                         tmp = client.describe_stack_events(StackName=stack_name)['StackEvents'][:1]
                         events.extend(tmp)
                     events = [{'member': e} for e in events]
-                    response_content = '<StackEvents>%s</StackEvents>' % obj_to_xml(events)
+                    response_content = f'<StackEvents>{obj_to_xml(events)}</StackEvents>'
                     return make_response('DescribeStackEvents', response_content)
 
-        if req_data:
-            if action == 'ValidateTemplate':
-                return validate_template(req_data)
+        if req_data and action == 'ValidateTemplate':
+            return validate_template(req_data)
 
         return True
 
     def return_response(self, method, path, data, headers, response):
         if response.status_code >= 400:
-            LOG.debug('Error response from CloudFormation (%s) %s %s: %s' %
-                      (response.status_code, method, path, response.content))
+            LOG.debug(
+                f'Error response from CloudFormation ({response.status_code}) {method} {path}: {response.content}'
+            )
         if response._content:
             aws_stack.fix_account_id_in_arns(response)
 
     def _list_stack_names(self):
         client = aws_stack.connect_to_service('cloudformation')
-        stack_names = [s['StackName'] for s in client.list_stacks()['StackSummaries']]
-        return stack_names
+        return [s['StackName'] for s in client.list_stacks()['StackSummaries']]
 
 
 # instantiate listener

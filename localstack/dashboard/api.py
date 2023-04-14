@@ -13,7 +13,7 @@ from localstack.utils.aws.aws_stack import Environment
 
 
 root_path = os.path.dirname(os.path.realpath(__file__))
-web_dir = root_path + '/web/'
+web_dir = f'{root_path}/web/'
 
 app = Flask('app', template_folder=web_dir)
 app.root_path = root_path
@@ -106,7 +106,7 @@ def hello():
 
 @app.route('/<path:path>')
 def send_static(path):
-    return send_from_directory(web_dir + '/', path)
+    return send_from_directory(f'{web_dir}/', path)
 
 
 def get_payload():
@@ -118,7 +118,7 @@ def ensure_webapp_installed():
     node_modules_dir = os.path.join(web_dir, 'node_modules', 'jquery')
     if not os.path.exists(node_modules_dir):
         print('Initializing installation of Web application (this could take a long time, please be patient)')
-        common.run('cd "%s"; npm install' % web_dir)
+        common.run(f'cd "{web_dir}"; npm install')
 
 
 def serve(port):
